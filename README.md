@@ -32,12 +32,30 @@ func articleData(ctx context.Context, rc *collage.RenderContext) (any, []string,
 `Emit` appends, so a breadcrumb fragment and a content fragment can each contribute
 without knowing about the other.
 
-## Why it reads the render's data and not the HTML
+## Where the blocks go
 
-The data handler already fetched the article. Parsing the headline back out of the
-markup in order to describe that markup is slower, and wrong the first time a
-template changes. The framework hands the render's shared data to `AfterRender`, so
-the plugin reads what the page was built *from*.
+The layout decides, with `{{hoist "head"}}`:
+
+```html
+<head>
+  <title>…</title>
+  {{hoist "head"}}
+</head>
+```
+
+`Emit` marshals and hoists immediately. An earlier version collected nodes during
+the render and spliced them into the finished HTML by searching for `</head>` — it
+worked, and it decided a layout question on the layout's behalf. A layout that never
+calls `{{hoist "head"}}` now gets nothing, which is the right answer rather than a
+missing feature.
+
+One key per schema.org type, so a nested fragment's `Article` replaces one a layout
+declared rather than sitting beside it: the innermost declaration of a key wins. Two
+nodes of different types both appear.
+
+The plugin itself only declares the site-wide `WebSite` node, from `BeforeRender`,
+where it lands at depth zero — a default any page can replace by emitting its own.
+Everything else goes through `Emit`, which needs no plugin registered at all.
 
 ## Types, not maps
 

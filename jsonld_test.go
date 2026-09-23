@@ -20,9 +20,10 @@ import (
 
 var templates = fstest.MapFS{
 	"layouts/main.html": &fstest.MapFile{Data: []byte(
-		`<!DOCTYPE html><html><head><title>t</title></head><body>{{slot "content"}}</body></html>`)},
+		`<!DOCTYPE html><html><head><title>t</title>{{hoist "head"}}</head><body>{{slot "content"}}</body></html>`)},
 	"pages/article.html": &fstest.MapFile{Data: []byte(`<article>{{.Headline}}</article>`)},
-	"pages/bare.html":    &fstest.MapFile{Data: []byte(`<p>no head here</p>`)},
+	"layouts/bare.html":  &fstest.MapFile{Data: []byte(`<p>no head here</p>{{slot "content"}}</p>`)},
+	"pages/bare.html":    &fstest.MapFile{Data: []byte(`<p>content</p>`)},
 }
 
 type articleView struct{ Headline string }
@@ -64,6 +65,9 @@ func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext)) 
 	// A page with no <head> at all, to show the plugin declining rather than
 	// inventing a place to write.
 	bare := collage.NewPage("bare").
+		WithLayout(collage.NewFragment("bare-layout", "layouts/bare.html").
+			WithSlot("content", true, false).
+			Build()).
 		WithContent(collage.NewFragment("bare", "pages/bare.html").
 			WithDataHandler(func(_ context.Context, rc *collage.RenderContext) (any, []string, error) { // any: the framework's own handler signature
 				jsonld.Emit(rc, jsonld.Article{Headline: "unreachable"})
@@ -188,11 +192,14 @@ func TestPlugin_EmitsNothingWhenThereIsNothingToSay(t *testing.T) {
 	}
 }
 
-func TestPlugin_DeclinesAPageWithNoHead(t *testing.T) {
+func TestPlugin_DeclinesALayoutWithNoHoistArea(t *testing.T) {
+	// A layout that never calls {{hoist "head"}} gets nothing. That is the layout
+	// deciding, which is the point of hoisting: the plugin no longer searches the
+	// finished HTML for somewhere to put itself.
 	site := newSite(t, jsonld.New(), nil)
 
 	if body := get(t, site, "/bare"); strings.Contains(body, "application/ld+json") {
-		t.Errorf("data was written into a page with no head:\n%s", body)
+		t.Errorf("data was written into a layout that asked for none:\n%s", body)
 	}
 }
 
