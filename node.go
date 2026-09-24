@@ -121,15 +121,23 @@ type Article struct {
 func (Article) Type() string { return "Article" }
 
 func (a Article) MarshalJSON() ([]byte, error) {
+	return json.Marshal(a.wire("Article"))
+}
+
+// wire is the article's schema.org shape under schemaType, shared with
+// BlogPosting so the two are one set of properties.
+func (a Article) wire(schemaType string) articleJSON {
 	out := articleJSON{
 		Context:     schemaContext,
-		SchemaType:  "Article",
+		SchemaType:  schemaType,
 		Headline:    a.Headline,
 		Description: a.Description,
 		URL:         a.URL,
 		Section:     a.Section,
 		Keywords:    a.Keywords,
 		WordCount:   a.WordCount,
+		Author:      authorNode(a.AuthorName, a.AuthorURL),
+		Publisher:   publisherNode(a.PublisherName, a.PublisherLogo),
 	}
 	if !a.DatePublished.IsZero() {
 		out.DatePublished = a.DatePublished.Format(time.RFC3339)
@@ -137,19 +145,48 @@ func (a Article) MarshalJSON() ([]byte, error) {
 	if !a.DateModified.IsZero() {
 		out.DateModified = a.DateModified.Format(time.RFC3339)
 	}
-	if a.AuthorName != "" {
-		out.Author = &person{SchemaType: "Person", Name: a.AuthorName, URL: a.AuthorURL}
-	}
-	if a.PublisherName != "" {
-		out.Publisher = &organization{SchemaType: "Organization", Name: a.PublisherName}
-		if a.PublisherLogo != "" {
-			out.Publisher.Logo = &imageObject{SchemaType: "ImageObject", URL: a.PublisherLogo}
-		}
-	}
 	if a.ImageURL != "" {
 		out.Image = &imageObject{SchemaType: "ImageObject", URL: a.ImageURL}
 	}
-	return json.Marshal(out)
+	return out
+}
+
+// BlogPosting is a post on a blog: schema.org/BlogPosting, which schema.org
+// derives from Article and which describes a blog post more precisely than
+// Article does.
+//
+// It is Article's own struct under another name rather than a copy of its
+// fields, so the two cannot drift apart: a property added to Article is a
+// property of a post too. Being a separate type is what gives it its own
+// "@type" — and its own key, so a page can emit both.
+type BlogPosting Article
+
+func (BlogPosting) Type() string { return "BlogPosting" }
+
+func (b BlogPosting) MarshalJSON() ([]byte, error) {
+	return json.Marshal(Article(b).wire("BlogPosting"))
+}
+
+// authorNode and publisherNode describe the author and publisher Article
+// flattens into name fields, and are nil when the name is empty so the property
+// is left out rather than emitted nameless.
+
+func authorNode(name, url string) *person {
+	if name == "" {
+		return nil
+	}
+	return &person{SchemaType: "Person", Name: name, URL: url}
+}
+
+func publisherNode(name, logo string) *organization {
+	if name == "" {
+		return nil
+	}
+	out := &organization{SchemaType: "Organization", Name: name}
+	if logo != "" {
+		out.Logo = &imageObject{SchemaType: "ImageObject", URL: logo}
+	}
+	return out
 }
 
 // WebSite describes the site itself: schema.org/WebSite.

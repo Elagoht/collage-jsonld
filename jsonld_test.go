@@ -394,3 +394,70 @@ func TestRaw_ClosingScriptTagCannotEscape(t *testing.T) {
 		t.Errorf("nodes = %v, want one Event named with the original string", nodes)
 	}
 }
+
+// marshal is json.Marshal for a node, failing the test on an error.
+func marshal(t *testing.T, node jsonld.Node) string {
+	t.Helper()
+	out, err := json.Marshal(node)
+	if err != nil {
+		t.Fatalf("Marshal(%s): %v", node.Type(), err)
+	}
+	return string(out)
+}
+
+func TestBlogPosting_IsAnArticleUnderItsOwnType(t *testing.T) {
+	// Every property Article has, a post has, spelled the same way: only the
+	// "@type" differs.
+	article := jsonld.Article{
+		Headline:      "Seawalls Buy Time",
+		Description:   "What a decade of seawalls bought.",
+		URL:           "https://blog.example/seawalls",
+		Section:       "Climate",
+		Keywords:      []string{"climate", "adaptation"},
+		DatePublished: time.Date(2026, 9, 20, 8, 0, 0, 0, time.UTC),
+		DateModified:  time.Date(2026, 9, 21, 8, 0, 0, 0, time.UTC),
+		AuthorName:    "Noor Haddad",
+		AuthorURL:     "https://blog.example/about",
+		PublisherName: "Noor's Notes",
+		PublisherLogo: "https://blog.example/logo.png",
+		ImageURL:      "https://blog.example/seawalls.jpg",
+		WordCount:     1200,
+	}
+
+	got := marshal(t, jsonld.BlogPosting(article))
+	want := strings.Replace(marshal(t, article), `"@type":"Article"`, `"@type":"BlogPosting"`, 1)
+	if got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+	if !strings.HasPrefix(got, `{"@context":"https://schema.org","@type":"BlogPosting",`) {
+		t.Errorf("got %s, want a schema.org BlogPosting", got)
+	}
+}
+
+func TestPlugin_BlogPostingAndArticleBothAppear(t *testing.T) {
+	// One key per schema.org type, so a BlogPosting does not replace an Article.
+	site := newSite(t, jsonld.New(), func(rc *collage.RenderContext) {
+		jsonld.Emit(rc,
+			jsonld.Article{Headline: "x"},
+			jsonld.BlogPosting{Headline: "y"},
+		)
+	})
+
+	nodes := blocks(t, get(t, site, "/article"))
+	seen := map[string]bool{}
+	for _, node := range nodes {
+		if node["@context"] != "https://schema.org" {
+			t.Errorf("node %v declares no schema.org context", node)
+		}
+		schemaType, _ := node["@type"].(string)
+		seen[schemaType] = true
+	}
+	for _, want := range []string{"Article", "BlogPosting"} {
+		if !seen[want] {
+			t.Errorf("no %s block among %v", want, nodes)
+		}
+	}
+	if len(nodes) != 2 {
+		t.Errorf("got %d nodes, want 2", len(nodes))
+	}
+}
