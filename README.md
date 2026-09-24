@@ -140,7 +140,8 @@ of its own. `searchURL` turns it into a `SearchAction`.
   consumer that fails to parse an empty one may distrust the whole page.
 - **Invent a place to write.** A page whose layout produces no `<head>` gets
   nothing.
-- **Fail a page.** A node that cannot be marshalled is logged and skipped. Structured
+- **Fail a page.** A node that cannot be marshalled is skipped, and the page's other
+  nodes are still emitted. Structured
   data is an enhancement, and a 500 for a malformed one would be the plugin deciding
   otherwise on the site's behalf.
 
