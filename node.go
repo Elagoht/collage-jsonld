@@ -215,6 +215,11 @@ type Person struct {
 	URL         string
 	ImageURL    string
 	JobTitle    string
+	// Email is written as given; schema.org takes the plain address.
+	Email string
+	// KnowsAbout are the subjects the person is known for: "Go", "Distributed
+	// systems".
+	KnowsAbout []string
 	// SameAs are the person's profiles elsewhere, which is how a consumer ties
 	// this page to the same person on other sites.
 	SameAs []string
@@ -230,6 +235,8 @@ func (p Person) MarshalJSON() ([]byte, error) {
 		Description: p.Description,
 		URL:         p.URL,
 		JobTitle:    p.JobTitle,
+		Email:       p.Email,
+		KnowsAbout:  p.KnowsAbout,
 		SameAs:      p.SameAs,
 	}
 	if p.ImageURL != "" {
@@ -354,6 +361,8 @@ type personJSON struct {
 	URL         string       `json:"url,omitempty"`
 	Image       *imageObject `json:"image,omitempty"`
 	JobTitle    string       `json:"jobTitle,omitempty"`
+	Email       string       `json:"email,omitempty"`
+	KnowsAbout  []string     `json:"knowsAbout,omitempty"`
 	SameAs      []string     `json:"sameAs,omitempty"`
 }
 

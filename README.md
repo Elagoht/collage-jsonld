@@ -104,14 +104,17 @@ jsonld.Emit(rc, jsonld.Blog{
 ```
 
 `Person` is someone in their own right, for an author or about page — `name`,
-`description`, `url`, `image`, `jobTitle` and `sameAs`, the last being the profiles
-elsewhere that tie this page to the same person on other sites:
+`description`, `url`, `image`, `jobTitle`, `email`, `knowsAbout` and `sameAs`, the
+last being the profiles elsewhere that tie this page to the same person on other
+sites:
 
 ```go
 jsonld.Emit(rc, jsonld.Person{
-	Name:     "Noor Haddad",
-	JobTitle: "Climate reporter",
-	SameAs:   []string{"https://github.com/noor"},
+	Name:       "Noor Haddad",
+	JobTitle:   "Climate reporter",
+	Email:      "noor@blog.example",
+	KnowsAbout: []string{"Sea level", "Coastal erosion"},
+	SameAs:     []string{"https://github.com/noor"},
 })
 ```
 

@@ -453,12 +453,15 @@ func TestPerson_Marshal(t *testing.T) {
 				URL:         "https://blog.example/about",
 				ImageURL:    "https://blog.example/noor.jpg",
 				JobTitle:    "Climate reporter",
+				Email:       "noor@blog.example",
+				KnowsAbout:  []string{"Sea level", "Coastal erosion"},
 				SameAs:      []string{"https://github.com/noor", "https://mastodon.example/@noor"},
 			},
 			want: `{"@context":"https://schema.org","@type":"Person","name":"Noor Haddad",` +
 				`"description":"Writes about the coast.","url":"https://blog.example/about",` +
 				`"image":{"@type":"ImageObject","url":"https://blog.example/noor.jpg"},` +
-				`"jobTitle":"Climate reporter",` +
+				`"jobTitle":"Climate reporter","email":"noor@blog.example",` +
+				`"knowsAbout":["Sea level","Coastal erosion"],` +
 				`"sameAs":["https://github.com/noor","https://mastodon.example/@noor"]}`,
 		},
 	}
