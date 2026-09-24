@@ -471,14 +471,63 @@ func TestPerson_Marshal(t *testing.T) {
 	}
 }
 
+func TestBlog_Marshal(t *testing.T) {
+	cases := []struct {
+		name string
+		blog jsonld.Blog
+		want string
+	}{
+		{
+			name: "no posts, no blogPost property",
+			blog: jsonld.Blog{Name: "Noor's Notes", URL: "https://blog.example"},
+			want: `{"@context":"https://schema.org","@type":"Blog","name":"Noor's Notes","url":"https://blog.example"}`,
+		},
+		{
+			// A post nested in the blog carries no "@context" of its own: the
+			// blog's covers it.
+			name: "every property, with posts",
+			blog: jsonld.Blog{
+				Name:          "Noor's Notes",
+				Description:   "Notes from the coast.",
+				URL:           "https://blog.example",
+				AuthorName:    "Noor Haddad",
+				AuthorURL:     "https://blog.example/about",
+				PublisherName: "Noor's Notes",
+				PublisherLogo: "https://blog.example/logo.png",
+				ImageURL:      "https://blog.example/cover.jpg",
+				Posts: []jsonld.BlogPosting{
+					{Headline: "Seawalls Buy Time", URL: "https://blog.example/seawalls"},
+					{Headline: "Dunes, Again", DatePublished: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
+				},
+			},
+			want: `{"@context":"https://schema.org","@type":"Blog","name":"Noor's Notes",` +
+				`"description":"Notes from the coast.","url":"https://blog.example",` +
+				`"author":{"@type":"Person","name":"Noor Haddad","url":"https://blog.example/about"},` +
+				`"publisher":{"@type":"Organization","name":"Noor's Notes","logo":{"@type":"ImageObject","url":"https://blog.example/logo.png"}},` +
+				`"image":{"@type":"ImageObject","url":"https://blog.example/cover.jpg"},` +
+				`"blogPost":[` +
+				`{"@type":"BlogPosting","headline":"Seawalls Buy Time","url":"https://blog.example/seawalls"},` +
+				`{"@type":"BlogPosting","headline":"Dunes, Again","datePublished":"2026-09-01T00:00:00Z"}]}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := marshal(t, tc.blog); got != tc.want {
+				t.Errorf("got  %s\nwant %s", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPlugin_BlogTypesEachGetTheirOwnBlock(t *testing.T) {
 	// One key per schema.org type, so a BlogPosting does not replace an Article
-	// or the Person beside it.
+	// or the Person and Blog around it.
 	site := newSite(t, jsonld.New(), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc,
 			jsonld.Article{Headline: "x"},
 			jsonld.BlogPosting{Headline: "y"},
 			jsonld.Person{Name: "Noor Haddad"},
+			jsonld.Blog{Name: "Noor's Notes"},
 		)
 	})
 
@@ -491,12 +540,12 @@ func TestPlugin_BlogTypesEachGetTheirOwnBlock(t *testing.T) {
 		schemaType, _ := node["@type"].(string)
 		seen[schemaType] = true
 	}
-	for _, want := range []string{"Article", "BlogPosting", "Person"} {
+	for _, want := range []string{"Article", "BlogPosting", "Person", "Blog"} {
 		if !seen[want] {
 			t.Errorf("no %s block among %v", want, nodes)
 		}
 	}
-	if len(nodes) != 3 {
-		t.Errorf("got %d nodes, want 3", len(nodes))
+	if len(nodes) != 4 {
+		t.Errorf("got %d nodes, want 4", len(nodes))
 	}
 }

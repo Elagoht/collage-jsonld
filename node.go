@@ -121,14 +121,15 @@ type Article struct {
 func (Article) Type() string { return "Article" }
 
 func (a Article) MarshalJSON() ([]byte, error) {
-	return json.Marshal(a.wire("Article"))
+	out := a.wire("Article")
+	out.Context = schemaContext
+	return json.Marshal(out)
 }
 
-// wire is the article's schema.org shape under schemaType, shared with
-// BlogPosting so the two are one set of properties.
+// wire is the article's schema.org shape under schemaType, without "@context" —
+// which only a top-level node declares, so a post nested in a Blog leaves it out.
 func (a Article) wire(schemaType string) articleJSON {
 	out := articleJSON{
-		Context:     schemaContext,
 		SchemaType:  schemaType,
 		Headline:    a.Headline,
 		Description: a.Description,
@@ -164,7 +165,45 @@ type BlogPosting Article
 func (BlogPosting) Type() string { return "BlogPosting" }
 
 func (b BlogPosting) MarshalJSON() ([]byte, error) {
-	return json.Marshal(Article(b).wire("BlogPosting"))
+	out := Article(b).wire("BlogPosting")
+	out.Context = schemaContext
+	return json.Marshal(out)
+}
+
+// Blog is the blog itself, typically on its index page: schema.org/Blog.
+type Blog struct {
+	Name          string
+	Description   string
+	URL           string
+	AuthorName    string
+	AuthorURL     string
+	PublisherName string
+	PublisherLogo string
+	ImageURL      string
+	// Posts are the posts the page lists, emitted as the blog's "blogPost"
+	// property. Each carries no "@context" of its own; the blog's covers it.
+	Posts []BlogPosting
+}
+
+func (Blog) Type() string { return "Blog" }
+
+func (b Blog) MarshalJSON() ([]byte, error) {
+	out := blogJSON{
+		Context:     schemaContext,
+		SchemaType:  "Blog",
+		Name:        b.Name,
+		Description: b.Description,
+		URL:         b.URL,
+		Author:      authorNode(b.AuthorName, b.AuthorURL),
+		Publisher:   publisherNode(b.PublisherName, b.PublisherLogo),
+	}
+	if b.ImageURL != "" {
+		out.Image = &imageObject{SchemaType: "ImageObject", URL: b.ImageURL}
+	}
+	for _, post := range b.Posts {
+		out.BlogPost = append(out.BlogPost, Article(post).wire("BlogPosting"))
+	}
+	return json.Marshal(out)
 }
 
 // Person is someone in their own right — an author's page, an about page:
@@ -199,9 +238,9 @@ func (p Person) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
-// authorNode and publisherNode describe the author and publisher Article
-// flattens into name fields, and are nil when the name is empty so the property
-// is left out rather than emitted nameless.
+// authorNode and publisherNode describe the author and publisher that Article
+// and Blog both flatten into name fields, and are nil when the name is empty so
+// the property is left out rather than emitted nameless.
 
 func authorNode(name, url string) *person {
 	if name == "" {
@@ -280,7 +319,7 @@ func (b BreadcrumbList) MarshalJSON() ([]byte, error) {
 // the wire uses schema.org's.
 
 type articleJSON struct {
-	Context       string        `json:"@context"`
+	Context       string        `json:"@context,omitempty"` // empty only when nested in a Blog
 	SchemaType    string        `json:"@type"`
 	Headline      string        `json:"headline,omitempty"`
 	Description   string        `json:"description,omitempty"`
@@ -293,6 +332,18 @@ type articleJSON struct {
 	Author        *person       `json:"author,omitempty"`
 	Publisher     *organization `json:"publisher,omitempty"`
 	Image         *imageObject  `json:"image,omitempty"`
+}
+
+type blogJSON struct {
+	Context     string        `json:"@context"`
+	SchemaType  string        `json:"@type"`
+	Name        string        `json:"name"`
+	Description string        `json:"description,omitempty"`
+	URL         string        `json:"url,omitempty"`
+	Author      *person       `json:"author,omitempty"`
+	Publisher   *organization `json:"publisher,omitempty"`
+	Image       *imageObject  `json:"image,omitempty"`
+	BlogPost    []articleJSON `json:"blogPost,omitempty"`
 }
 
 type personJSON struct {

@@ -63,7 +63,7 @@ JSON-LD is open-ended, so the obvious shape is `map[string]any` — and then not
 catches a misspelled property, the compiler has nothing to say about a missing one,
 and every application invents its own spelling of the same vocabulary.
 
-`Article`, `BlogPosting`, `Person`, `WebSite` and `BreadcrumbList` cover
+`Article`, `BlogPosting`, `Blog`, `Person`, `WebSite` and `BreadcrumbList` cover
 what a content site actually emits. `Raw` is the escape hatch for anything else,
 and it makes the escape explicit rather than making it the default — it also
 refuses invalid JSON, because an unparseable block inside a `<script>` tag can make
@@ -86,6 +86,20 @@ jsonld.Emit(rc, jsonld.BlogPosting{
 	DatePublished: post.PublishedAt,
 	AuthorName:    post.Author,
 	AuthorURL:     "https://blog.example/about",
+})
+```
+
+`Blog` describes the blog, typically on its index. Its author and publisher are
+flattened into name fields the way `Article`'s are, and `Posts` becomes its
+`blogPost` list — each post without an `@context` of its own, since the blog's
+covers it:
+
+```go
+jsonld.Emit(rc, jsonld.Blog{
+	Name:       "Noor's Notes",
+	URL:        "https://blog.example",
+	AuthorName: "Noor Haddad",
+	Posts:      []jsonld.BlogPosting{{Headline: "Seawalls Buy Time", URL: "https://blog.example/seawalls"}},
 })
 ```
 
