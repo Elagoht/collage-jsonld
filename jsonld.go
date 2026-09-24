@@ -146,7 +146,7 @@ func New() *Plugin { return &Plugin{} }
 func NewWith(cfg Config) *Plugin { return &Plugin{cfg: cfg} }
 
 func (p *Plugin) Name() string    { return Name }
-func (p *Plugin) Version() string { return "2.0.0" }
+func (p *Plugin) Version() string { return "0.2.0" }
 
 func (p *Plugin) Init(_ context.Context, host collage.Host) error {
 	p.log = host.Logger()
