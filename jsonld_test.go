@@ -309,3 +309,88 @@ func TestRaw_AddsTheContext(t *testing.T) {
 		t.Errorf("@context = %v", node["@context"])
 	}
 }
+
+func TestRaw_KeepsTheCallersKeyOrder(t *testing.T) {
+	// Decoding through a map sorted the keys, which put "description" before
+	// "@type". Valid JSON-LD, and hard to read in a page's source.
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "context goes first, the rest as written",
+			in:   `{"@type":"Event","name":"x","description":"d","startDate":"2026-10-01"}`,
+			want: `{"@context":"https://schema.org","@type":"Event","name":"x","description":"d","startDate":"2026-10-01"}`,
+		},
+		{
+			name: "nested values are copied through untouched",
+			in:   `{"@type":"Event","location":{"name":"Hall","@type":"Place"},"offers":[{"price":"0","@type":"Offer"}]}`,
+			want: `{"@context":"https://schema.org","@type":"Event","location":{"name":"Hall","@type":"Place"},"offers":[{"price":"0","@type":"Offer"}]}`,
+		},
+		{
+			name: "whitespace around and inside the object",
+			in:   "\n  { \"@type\" : \"Event\" ,\n\t\"name\" : \"x\" }  \n",
+			want: `{"@context":"https://schema.org","@type":"Event","name":"x"}`,
+		},
+		{
+			name: "an empty object",
+			in:   `{}`,
+			want: `{"@context":"https://schema.org"}`,
+		},
+		{
+			name: "the caller's own context is replaced, not repeated",
+			in:   `{"@type":"Event","@context":"http://example.org/other","name":"x"}`,
+			want: `{"@context":"https://schema.org","@type":"Event","name":"x"}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := json.Marshal(jsonld.Raw{SchemaType: "Event", JSON: []byte(tc.in)})
+			if err != nil {
+				t.Fatalf("Marshal: %v", err)
+			}
+			if string(out) != tc.want {
+				t.Errorf("got  %s\nwant %s", out, tc.want)
+			}
+		})
+	}
+}
+
+func TestRaw_RejectsWhatIsNotAnObject(t *testing.T) {
+	// There is nowhere to put "@context" in anything but an object. null used to
+	// decode into a nil map and panic, which took the render down with it.
+	for _, in := range []string{``, `null`, `[]`, `[{"@type":"Event"}]`, `"Event"`, `42`, `{} {}`, `{"@type":"Event",}`} {
+		if out, err := json.Marshal(jsonld.Raw{SchemaType: "Event", JSON: []byte(in)}); err == nil {
+			t.Errorf("Marshal(%q) = %s, want an error", in, out)
+		}
+	}
+}
+
+func TestRaw_ClosingScriptTagCannotEscape(t *testing.T) {
+	// Raw copies the caller's values through verbatim, so a literal "</script>"
+	// in one is the caller's bytes reaching the page unless Raw escapes them.
+	payload := `</script><img src=x onerror=alert(1)>`
+	// Hand-written, as a caller's literal would be: encoding/json would have
+	// escaped the "<" before Raw ever saw it.
+	raw := []byte(`{"@type":"Event","name":"` + payload + `"}`)
+
+	out, err := jsonld.Raw{SchemaType: "Event", JSON: raw}.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON: %v", err)
+	}
+	if strings.Contains(string(out), "<") {
+		t.Errorf("MarshalJSON left a literal '<' in place: %s", out)
+	}
+
+	site := newSite(t, jsonld.New(), func(rc *collage.RenderContext) {
+		jsonld.Emit(rc, jsonld.Raw{SchemaType: "Event", JSON: raw})
+	})
+	body := get(t, site, "/article")
+	if strings.Contains(body, "<img src=x") {
+		t.Fatalf("the payload escaped the script block:\n%s", body)
+	}
+	if nodes := blocks(t, body); len(nodes) != 1 || nodes[0]["name"] != payload {
+		t.Errorf("nodes = %v, want one Event named with the original string", nodes)
+	}
+}

@@ -1,7 +1,9 @@
 package jsonld
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -34,20 +36,69 @@ const schemaContext = "https://schema.org"
 type Raw struct {
 	// SchemaType is what the data declares as its "@type", for diagnostics.
 	SchemaType string
-	// JSON is the node, already marshalled, without the "@context" property —
-	// which MarshalJSON adds, so every node on a page declares it the same way.
+	// JSON is the node, already marshalled, as a JSON object. It needs no
+	// "@context" property: MarshalJSON puts one first, replacing any the object
+	// has, so every node on a page declares it the same way. The other members
+	// keep the order they are written in.
 	JSON json.RawMessage
 }
 
 func (r Raw) Type() string { return r.SchemaType }
 
+// MarshalJSON writes "@context" first and then the caller's members in the order
+// the caller wrote them.
+//
+// It walks the object member by member rather than decoding it into a map, because
+// a map comes back out in alphabetical order: "@type" would land after
+// "description", which is valid JSON-LD and miserable to read in a page's source.
+// Each value is copied through verbatim. A member the caller named "@context" is
+// dropped rather than repeated, so the node declares the same context as every other
+// node on the page — and a duplicate key is one a consumer may resolve either way.
 func (r Raw) MarshalJSON() ([]byte, error) {
-	var probe map[string]json.RawMessage
-	if err := json.Unmarshal(r.JSON, &probe); err != nil {
-		return nil, err
+	// Valid first, so the walk below only has to understand the shape and never
+	// decides what counts as JSON.
+	if !json.Valid(r.JSON) {
+		return nil, fmt.Errorf("jsonld: raw %s node is not valid JSON", r.SchemaType)
 	}
-	probe["@context"] = json.RawMessage(`"` + schemaContext + `"`)
-	return json.Marshal(probe)
+	dec := json.NewDecoder(bytes.NewReader(r.JSON))
+	if open, err := dec.Token(); err != nil || open != json.Delim('{') {
+		// An array, a string or null has nowhere to put "@context". null in
+		// particular used to decode into a nil map and panic on the assignment.
+		return nil, fmt.Errorf("jsonld: raw %s node is not a JSON object", r.SchemaType)
+	}
+
+	var out bytes.Buffer
+	out.WriteString(`{"@context":"` + schemaContext + `"`)
+	for dec.More() {
+		keyToken, err := dec.Token()
+		if err != nil {
+			return nil, err
+		}
+		key, _ := keyToken.(string) // json.Valid held, so an object key is a string
+		var value json.RawMessage
+		if err := dec.Decode(&value); err != nil {
+			return nil, err
+		}
+		if key == "@context" {
+			continue
+		}
+		encodedKey, err := json.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
+		out.WriteByte(',')
+		out.Write(encodedKey)
+		out.WriteByte(':')
+		out.Write(value)
+	}
+	out.WriteByte('}')
+
+	// The verbatim values are the caller's bytes, which may hold a literal "<".
+	// Escaping here keeps Raw holding the same two layers every other node does,
+	// rather than leaning on json.Marshal's pass alone.
+	var escaped bytes.Buffer
+	json.HTMLEscape(&escaped, out.Bytes())
+	return escaped.Bytes(), nil
 }
 
 // Article is a piece of writing: schema.org/Article.

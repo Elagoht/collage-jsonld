@@ -69,6 +69,11 @@ than making it the default — it also refuses invalid JSON, because an unparsea
 block inside a `<script>` tag can make a consumer discard every other node on the
 page with it.
 
+`Raw` takes a JSON object and emits it with `"@context"` first and the rest of its
+members in the order they were written — not re-sorted, so `@type` stays where the
+caller put it. A `"@context"` the object already has is replaced rather than
+repeated. Anything but an object, `null` included, is refused.
+
 ## Configuration
 
 ```json
