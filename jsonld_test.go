@@ -434,12 +434,51 @@ func TestBlogPosting_IsAnArticleUnderItsOwnType(t *testing.T) {
 	}
 }
 
-func TestPlugin_BlogPostingAndArticleBothAppear(t *testing.T) {
-	// One key per schema.org type, so a BlogPosting does not replace an Article.
+func TestPerson_Marshal(t *testing.T) {
+	cases := []struct {
+		name   string
+		person jsonld.Person
+		want   string
+	}{
+		{
+			name:   "only a name",
+			person: jsonld.Person{Name: "Noor Haddad"},
+			want:   `{"@context":"https://schema.org","@type":"Person","name":"Noor Haddad"}`,
+		},
+		{
+			name: "every property",
+			person: jsonld.Person{
+				Name:        "Noor Haddad",
+				Description: "Writes about the coast.",
+				URL:         "https://blog.example/about",
+				ImageURL:    "https://blog.example/noor.jpg",
+				JobTitle:    "Climate reporter",
+				SameAs:      []string{"https://github.com/noor", "https://mastodon.example/@noor"},
+			},
+			want: `{"@context":"https://schema.org","@type":"Person","name":"Noor Haddad",` +
+				`"description":"Writes about the coast.","url":"https://blog.example/about",` +
+				`"image":{"@type":"ImageObject","url":"https://blog.example/noor.jpg"},` +
+				`"jobTitle":"Climate reporter",` +
+				`"sameAs":["https://github.com/noor","https://mastodon.example/@noor"]}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := marshal(t, tc.person); got != tc.want {
+				t.Errorf("got  %s\nwant %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPlugin_BlogTypesEachGetTheirOwnBlock(t *testing.T) {
+	// One key per schema.org type, so a BlogPosting does not replace an Article
+	// or the Person beside it.
 	site := newSite(t, jsonld.New(), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc,
 			jsonld.Article{Headline: "x"},
 			jsonld.BlogPosting{Headline: "y"},
+			jsonld.Person{Name: "Noor Haddad"},
 		)
 	})
 
@@ -452,12 +491,12 @@ func TestPlugin_BlogPostingAndArticleBothAppear(t *testing.T) {
 		schemaType, _ := node["@type"].(string)
 		seen[schemaType] = true
 	}
-	for _, want := range []string{"Article", "BlogPosting"} {
+	for _, want := range []string{"Article", "BlogPosting", "Person"} {
 		if !seen[want] {
 			t.Errorf("no %s block among %v", want, nodes)
 		}
 	}
-	if len(nodes) != 2 {
-		t.Errorf("got %d nodes, want 2", len(nodes))
+	if len(nodes) != 3 {
+		t.Errorf("got %d nodes, want 3", len(nodes))
 	}
 }

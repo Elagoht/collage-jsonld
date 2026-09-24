@@ -167,6 +167,38 @@ func (b BlogPosting) MarshalJSON() ([]byte, error) {
 	return json.Marshal(Article(b).wire("BlogPosting"))
 }
 
+// Person is someone in their own right — an author's page, an about page:
+// schema.org/Person. An article's author is described by Article's own fields;
+// this is for a page about the person.
+type Person struct {
+	Name        string
+	Description string
+	URL         string
+	ImageURL    string
+	JobTitle    string
+	// SameAs are the person's profiles elsewhere, which is how a consumer ties
+	// this page to the same person on other sites.
+	SameAs []string
+}
+
+func (Person) Type() string { return "Person" }
+
+func (p Person) MarshalJSON() ([]byte, error) {
+	out := personJSON{
+		Context:     schemaContext,
+		SchemaType:  "Person",
+		Name:        p.Name,
+		Description: p.Description,
+		URL:         p.URL,
+		JobTitle:    p.JobTitle,
+		SameAs:      p.SameAs,
+	}
+	if p.ImageURL != "" {
+		out.Image = &imageObject{SchemaType: "ImageObject", URL: p.ImageURL}
+	}
+	return json.Marshal(out)
+}
+
 // authorNode and publisherNode describe the author and publisher Article
 // flattens into name fields, and are nil when the name is empty so the property
 // is left out rather than emitted nameless.
@@ -263,6 +295,19 @@ type articleJSON struct {
 	Image         *imageObject  `json:"image,omitempty"`
 }
 
+type personJSON struct {
+	Context     string       `json:"@context"`
+	SchemaType  string       `json:"@type"`
+	Name        string       `json:"name"`
+	Description string       `json:"description,omitempty"`
+	URL         string       `json:"url,omitempty"`
+	Image       *imageObject `json:"image,omitempty"`
+	JobTitle    string       `json:"jobTitle,omitempty"`
+	SameAs      []string     `json:"sameAs,omitempty"`
+}
+
+// person is an author nested in another node; Person is one emitted in its own
+// right, with the properties a page about someone has.
 type person struct {
 	SchemaType string `json:"@type"`
 	Name       string `json:"name"`

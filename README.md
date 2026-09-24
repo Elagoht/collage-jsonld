@@ -63,7 +63,7 @@ JSON-LD is open-ended, so the obvious shape is `map[string]any` — and then not
 catches a misspelled property, the compiler has nothing to say about a missing one,
 and every application invents its own spelling of the same vocabulary.
 
-`Article`, `BlogPosting`, `WebSite` and `BreadcrumbList` cover
+`Article`, `BlogPosting`, `Person`, `WebSite` and `BreadcrumbList` cover
 what a content site actually emits. `Raw` is the escape hatch for anything else,
 and it makes the escape explicit rather than making it the default — it also
 refuses invalid JSON, because an unparseable block inside a `<script>` tag can make
@@ -88,6 +88,21 @@ jsonld.Emit(rc, jsonld.BlogPosting{
 	AuthorURL:     "https://blog.example/about",
 })
 ```
+
+`Person` is someone in their own right, for an author or about page — `name`,
+`description`, `url`, `image`, `jobTitle` and `sameAs`, the last being the profiles
+elsewhere that tie this page to the same person on other sites:
+
+```go
+jsonld.Emit(rc, jsonld.Person{
+	Name:     "Noor Haddad",
+	JobTitle: "Climate reporter",
+	SameAs:   []string{"https://github.com/noor"},
+})
+```
+
+An article's author stays `Article`'s own `AuthorName` and `AuthorURL`; `Person` is
+for a page about the person.
 
 ## Configuration
 
