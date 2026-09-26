@@ -6,4 +6,4 @@ module github.com/Elagoht/collage-jsonld
 
 go 1.26
 
-require github.com/Elagoht/collage v0.4.4
+require github.com/Elagoht/collage v0.24.0

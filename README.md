@@ -159,3 +159,9 @@ The escaping is held twice over — each node's `MarshalJSON` escapes when it ma
 its wire struct, and `json.Marshal` re-escapes a `Marshaler`'s output when it
 compacts it — so disabling one layer changes nothing and disabling both opens the
 hole. `TestPlugin_ClosingScriptTagInContentCannotEscape` is what notices.
+
+## Changes
+
+### v0.2.2
+
+- Requires collage v0.24.0. Nothing else changes.
