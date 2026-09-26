@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Elagoht/collage-snippets-highlighter/main/schemas/collage-plugin-manifest.schema.json",
+  "name": "elagoht/jsonld",
+  "description": "A collage plugin that emits schema.org structured data into the document head.",
+  "repository": "https://github.com/Elagoht/collage-jsonld",
+  "config": {
+    "type": "object",
+    "description": "A collage plugin that emits schema.org structured data into the document head.",
+    "properties": {
+      "disabled": {
+        "type": "boolean",
+        "description": "Disabled turns structured data off without removing the plugin from the application: the site-wide node is not declared, and every Emit in the render returns without doing anything."
+      },
+      "searchURL": {
+        "type": "string",
+        "description": "SearchURL is a search endpoint with \"{query}\" where the term goes. It is part of the WebSite node, and ignored without SiteName."
+      },
+      "siteName": {
+        "type": "string",
+        "description": "SiteName and SiteURL describe the site. When SiteName is set, a WebSite node is declared on every page — as a default, which a page emitting its own WebSite replaces."
+      },
+      "siteURL": {
+        "type": "string"
+      }
+    }
+  }
+}
