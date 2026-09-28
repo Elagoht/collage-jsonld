@@ -47,7 +47,7 @@ func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext)) 
 
 	layout := collage.NewFragment("layout", "layouts/main.html").WithSlot("content", true, false).Build()
 	article := collage.NewPage("article").
-		WithLayout(layout).
+		WithLayouts(layout).
 		WithContent(collage.NewFragment("article", "pages/article.html").
 			WithDataHandler(func(_ context.Context, rc *collage.RenderContext) (any, []string, error) { // any: the framework's own handler signature
 				if emit != nil {
@@ -65,7 +65,7 @@ func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext)) 
 	// A page with no <head> at all, to show the plugin declining rather than
 	// inventing a place to write.
 	bare := collage.NewPage("bare").
-		WithLayout(collage.NewFragment("bare-layout", "layouts/bare.html").
+		WithLayouts(collage.NewFragment("bare-layout", "layouts/bare.html").
 			WithSlot("content", true, false).
 			Build()).
 		WithContent(collage.NewFragment("bare", "pages/bare.html").

@@ -162,6 +162,11 @@ hole. `TestPlugin_ClosingScriptTagInContentCannotEscape` is what notices.
 
 ## Changes
 
+### v0.2.4
+
+- Requires collage v0.28.0, whose `WithLayouts` the tests use; `WithLayout` is
+  gone from collage since then.
+
 ### v0.2.3
 
 - `collage.json`: the plugin described to editors — its template functions,
