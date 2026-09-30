@@ -22,6 +22,7 @@
       "siteURL": {
         "type": "string"
       }
-    }
+    },
+    "additionalProperties": false
   }
 }
