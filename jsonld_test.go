@@ -49,12 +49,12 @@ func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext)) 
 	article := collage.NewPage("article").
 		WithLayouts(layout).
 		WithContent(collage.NewFragment("article", "pages/article.html").
-			WithDataHandler(func(_ context.Context, rc *collage.RenderContext) (any, []string, error) { // any: the framework's own handler signature
+			WithData(collage.Load(func(_ context.Context, rc *collage.RenderContext) (articleView, error) {
 				if emit != nil {
 					emit(rc)
 				}
-				return articleView{Headline: "A Headline"}, nil, nil
-			}).
+				return articleView{Headline: "A Headline"}, nil
+			})).
 			Build()).
 		WithPath("en", "/article").
 		Build()
@@ -69,10 +69,10 @@ func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext)) 
 			WithSlot("content", true, false).
 			Build()).
 		WithContent(collage.NewFragment("bare", "pages/bare.html").
-			WithDataHandler(func(_ context.Context, rc *collage.RenderContext) (any, []string, error) { // any: the framework's own handler signature
+			WithData(collage.Effect(func(_ context.Context, rc *collage.RenderContext) error {
 				jsonld.Emit(rc, jsonld.Article{Headline: "unreachable"})
-				return nil, nil, nil
-			}).
+				return nil
+			})).
 			Build()).
 		WithPath("en", "/bare").
 		Build()

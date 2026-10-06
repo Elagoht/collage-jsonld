@@ -162,6 +162,11 @@ hole. `TestPlugin_ClosingScriptTagInContentCannotEscape` is what notices.
 
 ## Changes
 
+### v0.2.6
+
+- Built against collage v0.49.0, whose fragment data is a typed `collage.Data`;
+  the tests use `collage.Load` and `collage.Effect`. Requires collage v0.49.0.
+
 ### v0.2.4
 
 - Requires collage v0.28.0, whose `WithLayouts` the tests use; `WithLayout` is
