@@ -8,7 +8,7 @@
 // A page contributes its own structured data from a data handler, by putting nodes
 // into the render's shared data:
 //
-//	func articleData(ctx context.Context, rc *collage.RenderContext) (any, []string, error) {
+//	func articleData(ctx context.Context, rc *collage.RenderContext) (view, []string, error) {
 //		article, err := client.Article(ctx, rc.Param("slug"))
 //		// ...
 //		jsonld.Emit(rc, jsonld.Article{
@@ -18,6 +18,9 @@
 //		})
 //		return view{Article: article}, nil, nil
 //	}
+//
+//	collage.NewFragment("article", "pages/article.html").
+//		WithData(collage.DataHandler(articleData))
 //
 // The plugin reads them after the render and writes one <script> tag per node. It
 // reads the render's data rather than the rendered HTML deliberately: the data
@@ -146,7 +149,7 @@ func New() *Plugin { return &Plugin{} }
 func NewWith(cfg Config) *Plugin { return &Plugin{cfg: cfg} }
 
 func (p *Plugin) Name() string    { return Name }
-func (p *Plugin) Version() string { return "0.2.6" }
+func (p *Plugin) Version() string { return "0.2.7" }
 
 func (p *Plugin) Init(_ context.Context, host collage.Host) error {
 	p.log = host.Logger()

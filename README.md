@@ -13,10 +13,10 @@ It has no `Configure` phase, so `RegisterPlugin` accepts it as well.
 A page contributes its own data from a data handler:
 
 ```go
-func articleData(ctx context.Context, rc *collage.RenderContext) (any, []string, error) {
+func articleData(ctx context.Context, rc *collage.RenderContext) (view, []string, error) {
 	article, err := client.Article(ctx, rc.Param("slug"))
 	if err != nil {
-		return nil, nil, err
+		return view{}, nil, err
 	}
 	jsonld.Emit(rc, jsonld.Article{
 		Headline:      article.Title,
@@ -27,6 +27,9 @@ func articleData(ctx context.Context, rc *collage.RenderContext) (any, []string,
 	})
 	return view{Article: article}, nil, nil
 }
+
+collage.NewFragment("article", "pages/article.html").
+	WithData(collage.DataHandler(articleData))
 ```
 
 `Emit` appends, so a breadcrumb fragment and a content fragment can each contribute
@@ -161,6 +164,12 @@ compacts it — so disabling one layer changes nothing and disabling both opens 
 hole. `TestPlugin_ClosingScriptTagInContentCannotEscape` is what notices.
 
 ## Changes
+
+### v0.2.7
+
+- The README's and the package documentation's data handler returns its real
+  type and is passed as `WithData(collage.DataHandler(articleData))`, as collage
+  v0.49.0 takes it.
 
 ### v0.2.6
 
