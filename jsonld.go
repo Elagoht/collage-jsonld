@@ -5,8 +5,8 @@
 //		Plugins: []collage.Plugin{jsonld.New()},
 //	})
 //
-// A page contributes its own structured data from a data handler, by putting nodes
-// into the render's shared data:
+// A page contributes its own structured data from a data handler, by hoisting nodes
+// into the page's head:
 //
 //	func articleData(ctx context.Context, rc *collage.RenderContext) (view, []string, error) {
 //		article, err := client.Article(ctx, rc.Param("slug"))
@@ -75,19 +75,15 @@ func Emit(rc *collage.RenderContext, nodes ...Node) {
 
 // disabledKey marks a render the plugin was told to stay out of.
 //
-// Through the render's shared data rather than a package variable, because a
-// package variable is state two applications in one process would fight over and
+// Through the render's values rather than a package-level flag, because a
+// package-level flag is state two applications in one process would fight over and
 // tests would have to reset. The plugin writes it in OnBeforeRender; Emit reads it.
 // An application that calls Emit without registering the plugin has nothing to read
 // and emits, which is right: there is no configuration saying otherwise.
-const disabledKey = Name + ":disabled"
+var disabledKey = collage.NewKey[bool](Name + ":disabled")
 
 func disabledFor(rc *collage.RenderContext) bool {
-	value, ok := rc.Get(disabledKey)
-	if !ok {
-		return false
-	}
-	disabled, _ := value.(bool) // any: SharedData's own value type
+	disabled, _ := disabledKey.Get(rc)
 	return disabled
 }
 
@@ -149,11 +145,13 @@ func New() *Plugin { return &Plugin{} }
 func NewWith(cfg Config) *Plugin { return &Plugin{cfg: cfg} }
 
 func (p *Plugin) Name() string    { return Name }
-func (p *Plugin) Version() string { return "0.2.7" }
+func (p *Plugin) Version() string { return "0.2.9" }
 
 func (p *Plugin) Init(_ context.Context, host collage.Host) error {
 	p.log = host.Logger()
-	return host.Config(&p.cfg)
+	var err error
+	p.cfg, err = collage.PluginConfig(host, p.cfg)
+	return err
 }
 
 func (p *Plugin) Shutdown(context.Context) error { return nil }
@@ -170,7 +168,7 @@ func (p *Plugin) OnBeforeRender(_ context.Context, ev *collage.BeforeRenderEvent
 	}
 	if p.cfg.Disabled {
 		// Marked before any fragment runs, so every Emit this render sees it.
-		ev.Context.Set(disabledKey, true)
+		disabledKey.Set(ev.Context, true)
 		return nil
 	}
 	if p.cfg.SiteName == "" {

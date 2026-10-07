@@ -6,4 +6,6 @@ module github.com/Elagoht/collage-jsonld
 
 go 1.26
 
-require github.com/Elagoht/collage v0.49.0
+require github.com/Elagoht/collage v0.50.0
+
+retract v0.2.8 // tagged at v0.2.7's commit by mistake

@@ -165,6 +165,12 @@ hole. `TestPlugin_ClosingScriptTagInContentCannotEscape` is what notices.
 
 ## Changes
 
+### v0.2.9
+
+- v0.2.8 was tagged at v0.2.7's commit by mistake and is retracted.
+- Requires collage v0.50.0. `Disabled` marks a render through a typed key,
+  and the configuration is read with `collage.PluginConfig`.
+
 ### v0.2.7
 
 - The README's and the package documentation's data handler returns its real
