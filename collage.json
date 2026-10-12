@@ -17,10 +17,7 @@
       },
       "siteName": {
         "type": "string",
-        "description": "SiteName and SiteURL describe the site. When SiteName is set, a WebSite node is declared on every page — as a default, which a page emitting its own WebSite replaces."
-      },
-      "siteURL": {
-        "type": "string"
+        "description": "SiteName names the site. When it is set, a WebSite node is declared on every page — as a default, which a page emitting its own WebSite replaces. Its url is the application's origin, collage.BaseURL, and is left out when the application has none."
       }
     },
     "additionalProperties": false

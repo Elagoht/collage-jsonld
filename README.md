@@ -4,11 +4,12 @@ A collage plugin that emits schema.org structured data into the document head.
 
 ```go
 app, err := collage.New(&collage.Config{
-	Plugins: []collage.Plugin{jsonld.New()},
+	Plugins: []collage.Plugin{jsonld.New(jsonld.Options{})},
 })
 ```
 
-It has no `Configure` phase, so `RegisterPlugin` accepts it as well.
+Requires collage v0.61.0 or later. It has no `Configure` phase, so `RegisterPlugin`
+accepts it as well.
 
 A page contributes its own data from a data handler:
 
@@ -130,7 +131,6 @@ for a page about the person.
 {
   "elagoht/jsonld": {
     "siteName": "The Wire",
-    "siteURL": "https://thewire.example",
     "searchURL": "https://thewire.example/search?q={query}",
     "disabled": false
   }
@@ -138,7 +138,10 @@ for a page about the person.
 ```
 
 With `siteName` set, a `WebSite` node is added to every page that does not emit one
-of its own. `searchURL` turns it into a `SearchAction`.
+of its own. Its `url` is the application's origin, `collage.BaseURL` — the
+configured `BaseURL`, or each host's own origin on a multi-origin site — and is
+left out when the application has none. `searchURL` turns it into a
+`SearchAction`. The same keys are `jsonld.Options` fields in Go.
 
 ## What it will not do
 
@@ -146,8 +149,9 @@ of its own. `searchURL` turns it into a `SearchAction`.
   consumer that fails to parse an empty one may distrust the whole page.
 - **Invent a place to write.** A page whose layout produces no `<head>` gets
   nothing.
-- **Fail a page.** A node that cannot be marshalled is skipped, and the page's other
-  nodes are still emitted. Structured
+- **Fail a page.** A node that cannot be marshalled is skipped, with a warning in
+  the application's log naming its type, and the page's other nodes are still
+  emitted. Structured
   data is an enhancement, and a 500 for a malformed one would be the plugin deciding
   otherwise on the site's behalf.
 
@@ -164,6 +168,18 @@ compacts it — so disabling one layer changes nothing and disabling both opens 
 hole. `TestPlugin_ClosingScriptTagInContentCannotEscape` is what notices.
 
 ## Changes
+
+### Changed in v0.3.0
+
+- One constructor: `jsonld.New()` → `jsonld.New(jsonld.Options{})`, and
+  `jsonld.NewWith(jsonld.Config{…})` → `jsonld.New(jsonld.Options{…})`. The type
+  `Config` is now `Options`.
+- `siteURL` (`Config.SiteURL`) is removed; an old configuration naming it stops
+  at start with "unknown key". The WebSite node's `url` is the application's
+  origin (`collage.BaseURL`): set `BaseURL` in the application instead.
+- `HoistArea` is unexported; the layout still writes `{{hoist "head"}}`.
+- A node dropped because it cannot be marshalled is logged as a warning.
+- Requires collage v0.61.0.
 
 ### v0.2.9
 

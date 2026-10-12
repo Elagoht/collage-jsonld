@@ -3,48 +3,42 @@ package jsonld_test
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/Elagoht/collage/pkg/collage"
+	"github.com/Elagoht/collage/pkg/collagetest"
 
-	"github.com/Elagoht/collage-jsonld"
+	jsonld "github.com/Elagoht/collage-jsonld"
 )
 
-var templates = fstest.MapFS{
-	"layouts/main.html": &fstest.MapFile{Data: []byte(
-		`<!DOCTYPE html><html><head><title>t</title>{{hoist "head"}}</head><body>{{slot "content"}}</body></html>`)},
-	"pages/article.html": &fstest.MapFile{Data: []byte(`<article>{{.Headline}}</article>`)},
-	"layouts/bare.html":  &fstest.MapFile{Data: []byte(`<p>no head here</p>{{slot "content"}}</p>`)},
-	"pages/bare.html":    &fstest.MapFile{Data: []byte(`<p>content</p>`)},
+var templates = map[string]string{
+	"layouts/main.html":  `<!DOCTYPE html><html><head><title>t</title>{{hoist "head"}}</head><body>{{slot "content"}}</body></html>`,
+	"pages/article.html": `<article>{{.Headline}}</article>`,
+	"layouts/bare.html":  `<p>no head here</p>{{slot "content"}}</p>`,
+	"pages/bare.html":    `<p>content</p>`,
 }
 
 type articleView struct{ Headline string }
 
 // newSite builds a site whose article page emits whatever emit returns.
-func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext)) http.Handler {
+func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext), more ...collagetest.SiteOption) http.Handler {
 	t.Helper()
+	return startSite(t, p, emit, more...).App.Handler()
+}
 
-	app, err := collage.New(&collage.Config{
-		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Template: collage.TemplateConfig{FS: templates, Extension: ".html"},
-	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	if p != nil {
-		if err := app.RegisterPlugin(p); err != nil {
-			t.Fatalf("RegisterPlugin: %v", err)
-		}
-	}
+// startSite is newSite's Site, for a test that reads what it logged.
+func startSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext), more ...collagetest.SiteOption) *collagetest.Site {
+	t.Helper()
+	return collagetest.NewSite(t, siteOptions(p, emit, more...)...)
+}
 
+func siteOptions(p collage.Plugin, emit func(*collage.RenderContext), more ...collagetest.SiteOption) []collagetest.SiteOption {
 	layout := collage.NewFragment("layout", "layouts/main.html").WithSlot("content", collage.SlotRequired, collage.SlotSingle).Build()
 	article := collage.NewPage("article").
 		WithLayouts(layout).
@@ -58,9 +52,6 @@ func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext)) 
 			Build()).
 		WithPath("en", "/article").
 		Build()
-	if err := app.RegisterPage(article); err != nil {
-		t.Fatalf("RegisterPage: %v", err)
-	}
 
 	// A page with no <head> at all, to show the plugin declining rather than
 	// inventing a place to write.
@@ -76,11 +67,12 @@ func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext)) 
 			Build()).
 		WithPath("en", "/bare").
 		Build()
-	if err := app.RegisterPage(bare); err != nil {
-		t.Fatalf("RegisterPage(bare): %v", err)
-	}
 
-	return app.Handler()
+	options := []collagetest.SiteOption{collagetest.WithTemplates(templates), collagetest.WithRegister(article, bare)}
+	if p != nil {
+		options = append(options, collagetest.WithPlugins(p))
+	}
+	return append(options, more...)
 }
 
 var scriptBlock = regexp.MustCompile(`(?s)<script type="application/ld\+json">(.*?)</script>`)
@@ -112,7 +104,7 @@ func get(t *testing.T, h http.Handler, target string) string {
 
 func TestPlugin_EmitsWhatTheRenderContributed(t *testing.T) {
 	published := time.Date(2026, 9, 20, 8, 0, 0, 0, time.UTC)
-	site := newSite(t, jsonld.New(), func(rc *collage.RenderContext) {
+	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc, jsonld.Article{
 			Headline:      "Seawalls Buy Time",
 			DatePublished: published,
@@ -142,7 +134,7 @@ func TestPlugin_EmitsWhatTheRenderContributed(t *testing.T) {
 }
 
 func TestPlugin_EmitsIntoTheHead(t *testing.T) {
-	site := newSite(t, jsonld.New(), func(rc *collage.RenderContext) {
+	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc, jsonld.Article{Headline: "x"})
 	})
 
@@ -163,7 +155,7 @@ func TestPlugin_ClosingScriptTagInContentCannotEscape(t *testing.T) {
 	// What prevents it is that json.Marshal escapes "<", ">" and "&" by default.
 	// This test is what stands between that default and someone reaching for an
 	// Encoder with SetEscapeHTML(false), which produces valid JSON and this hole.
-	site := newSite(t, jsonld.New(), func(rc *collage.RenderContext) {
+	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc, jsonld.Article{Headline: `</script><img src=x onerror=alert(1)>`})
 	})
 
@@ -185,7 +177,7 @@ func TestPlugin_ClosingScriptTagInContentCannotEscape(t *testing.T) {
 func TestPlugin_EmitsNothingWhenThereIsNothingToSay(t *testing.T) {
 	// An empty block is worse than no block: a consumer that fails to parse one
 	// may distrust the whole page.
-	site := newSite(t, jsonld.New(), nil)
+	site := newSite(t, jsonld.New(jsonld.Options{}), nil)
 
 	if body := get(t, site, "/article"); strings.Contains(body, "application/ld+json") {
 		t.Errorf("a script block was emitted for a page with no data:\n%s", body)
@@ -196,7 +188,7 @@ func TestPlugin_DeclinesALayoutWithNoHoistArea(t *testing.T) {
 	// A layout that never calls {{hoist "head"}} gets nothing. That is the layout
 	// deciding, which is the point of hoisting: the plugin no longer searches the
 	// finished HTML for somewhere to put itself.
-	site := newSite(t, jsonld.New(), nil)
+	site := newSite(t, jsonld.New(jsonld.Options{}), nil)
 
 	if body := get(t, site, "/bare"); strings.Contains(body, "application/ld+json") {
 		t.Errorf("data was written into a layout that asked for none:\n%s", body)
@@ -204,13 +196,12 @@ func TestPlugin_DeclinesALayoutWithNoHoistArea(t *testing.T) {
 }
 
 func TestPlugin_AddsTheConfiguredWebSiteNode(t *testing.T) {
-	site := newSite(t, jsonld.NewWith(jsonld.Config{
+	site := newSite(t, jsonld.New(jsonld.Options{
 		SiteName:  "The Wire",
-		SiteURL:   "https://thewire.example",
 		SearchURL: "https://thewire.example/search?q={query}",
 	}), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc, jsonld.Article{Headline: "x"})
-	})
+	}, collagetest.WithConfig(func(c *collage.Config) { c.BaseURL = "https://thewire.example" }))
 
 	nodes := blocks(t, get(t, site, "/article"))
 	if len(nodes) != 2 {
@@ -226,6 +217,10 @@ func TestPlugin_AddsTheConfiguredWebSiteNode(t *testing.T) {
 		if node["name"] != "The Wire" {
 			t.Errorf("site name = %v", node["name"])
 		}
+		// The site's URL is the application's origin, Config.BaseURL.
+		if node["url"] != "https://thewire.example" {
+			t.Errorf("site url = %v, want the application's BaseURL", node["url"])
+		}
 		action, ok := node["potentialAction"].(map[string]any) // any: what encoding/json decodes into
 		if !ok || action["@type"] != "SearchAction" {
 			t.Errorf("potentialAction = %v, want a SearchAction", node["potentialAction"])
@@ -237,7 +232,7 @@ func TestPlugin_AddsTheConfiguredWebSiteNode(t *testing.T) {
 }
 
 func TestPlugin_DoesNotDuplicateAPagesOwnWebSiteNode(t *testing.T) {
-	site := newSite(t, jsonld.NewWith(jsonld.Config{SiteName: "The Wire"}), func(rc *collage.RenderContext) {
+	site := newSite(t, jsonld.New(jsonld.Options{SiteName: "The Wire"}), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc, jsonld.WebSite{Name: "Something Else"})
 	})
 
@@ -248,7 +243,7 @@ func TestPlugin_DoesNotDuplicateAPagesOwnWebSiteNode(t *testing.T) {
 }
 
 func TestPlugin_Disabled(t *testing.T) {
-	site := newSite(t, jsonld.NewWith(jsonld.Config{SiteName: "The Wire", Disabled: true}), func(rc *collage.RenderContext) {
+	site := newSite(t, jsonld.New(jsonld.Options{SiteName: "The Wire", Disabled: true}), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc, jsonld.Article{Headline: "x"})
 	})
 
@@ -261,7 +256,7 @@ func TestPlugin_MultipleFragmentsEachContribute(t *testing.T) {
 	// Emit appends, so two fragments can contribute without knowing about each
 	// other — which is the only way a breadcrumb fragment and a content fragment
 	// can both have a say.
-	site := newSite(t, jsonld.New(), func(rc *collage.RenderContext) {
+	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc, jsonld.Article{Headline: "x"})
 		jsonld.Emit(rc, jsonld.BreadcrumbList{Items: []jsonld.Breadcrumb{
 			{Name: "Home", URL: "/"},
@@ -383,7 +378,7 @@ func TestRaw_ClosingScriptTagCannotEscape(t *testing.T) {
 		t.Errorf("MarshalJSON left a literal '<' in place: %s", out)
 	}
 
-	site := newSite(t, jsonld.New(), func(rc *collage.RenderContext) {
+	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc, jsonld.Raw{SchemaType: "Event", JSON: raw})
 	})
 	body := get(t, site, "/article")
@@ -525,7 +520,7 @@ func TestBlog_Marshal(t *testing.T) {
 func TestPlugin_BlogTypesEachGetTheirOwnBlock(t *testing.T) {
 	// One key per schema.org type, so a BlogPosting does not replace an Article
 	// or the Person and Blog around it.
-	site := newSite(t, jsonld.New(), func(rc *collage.RenderContext) {
+	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc,
 			jsonld.Article{Headline: "x"},
 			jsonld.BlogPosting{Headline: "y"},
@@ -550,5 +545,42 @@ func TestPlugin_BlogTypesEachGetTheirOwnBlock(t *testing.T) {
 	}
 	if len(nodes) != 4 {
 		t.Errorf("got %d nodes, want 4", len(nodes))
+	}
+}
+
+// With no origin configured, the WebSite node has no url rather than a wrong one.
+func TestPlugin_WebSiteWithoutAnOrigin(t *testing.T) {
+	site := newSite(t, jsonld.New(jsonld.Options{SiteName: "The Wire"}), nil)
+	nodes := blocks(t, get(t, site, "/article"))
+	if len(nodes) != 1 || nodes[0]["name"] != "The Wire" {
+		t.Fatalf("nodes = %v, want the WebSite", nodes)
+	}
+	if url, ok := nodes[0]["url"]; ok {
+		t.Errorf("url = %v, want none without a BaseURL", url)
+	}
+}
+
+// siteURL is gone: the WebSite node's url is the application's BaseURL. The old
+// key stops the application.
+func TestRemovedSiteURL(t *testing.T) {
+	_, err := collagetest.TrySite(t, siteOptions(jsonld.New(jsonld.Options{}), nil,
+		collagetest.WithPluginConfig(jsonld.Name, `{"siteName": "x", "siteURL": "https://x.example"}`))...)
+	if err == nil || !strings.Contains(err.Error(), "unknown key") {
+		t.Errorf("start = %v, want an unknown key", err)
+	}
+}
+
+// A node that cannot be marshalled is left out of the page, and the reason is
+// logged rather than lost.
+func TestPlugin_LogsADroppedNode(t *testing.T) {
+	site := startSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
+		jsonld.Emit(rc, jsonld.Raw{SchemaType: "Event", JSON: []byte(`{"broken"`)}, jsonld.Article{Headline: "kept"})
+	})
+	nodes := blocks(t, site.Get("/article").WantStatus(http.StatusOK).Body)
+	if len(nodes) != 1 || nodes[0]["headline"] != "kept" {
+		t.Errorf("nodes = %v, want only the article", nodes)
+	}
+	if !site.Logs.Has(slog.LevelWarn, "jsonld", "Event") {
+		t.Errorf("the dropped node was not logged:\n%s", site.Logs)
 	}
 }

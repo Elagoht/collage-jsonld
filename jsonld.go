@@ -2,7 +2,7 @@
 // document head.
 //
 //	app, err := collage.New(&collage.Config{
-//		Plugins: []collage.Plugin{jsonld.New()},
+//		Plugins: []collage.Plugin{jsonld.New(jsonld.Options{SiteName: "The Wire"})},
 //	})
 //
 // A page contributes its own structured data from a data handler, by hoisting nodes
@@ -41,9 +41,9 @@ import (
 // Name is the plugin's name, and the key its configuration is found under.
 const Name = "elagoht/jsonld"
 
-// HoistArea is where the script tags go. Structured data belongs in the head, and
+// hoistArea is where the script tags go. Structured data belongs in the head, and
 // the layout decides where in it with {{hoist "head"}}.
-const HoistArea = "head"
+const hoistArea = "head"
 
 // Emit adds nodes to the structured data for the render rc belongs to.
 //
@@ -66,10 +66,12 @@ func Emit(rc *collage.RenderContext, nodes ...Node) {
 			// One bad node must not cost the page its other nodes, or the page
 			// itself. Structured data is an enhancement; failing a render over a
 			// malformed one would be this package deciding otherwise on the site's
-			// behalf.
+			// behalf. It is logged, so the missing node has a trace.
+			loggerFor(rc).WarnContext(rc.Context(), "jsonld: a node was left out of the page",
+				"type", node.Type(), "error", err)
 			continue
 		}
-		rc.Hoist(HoistArea, Name+":"+node.Type(), encoded)
+		rc.Hoist(hoistArea, Name+":"+node.Type(), encoded)
 	}
 }
 
@@ -81,6 +83,17 @@ func Emit(rc *collage.RenderContext, nodes ...Node) {
 // An application that calls Emit without registering the plugin has nothing to read
 // and emits, which is right: there is no configuration saying otherwise.
 var disabledKey = collage.NewKey[bool](Name + ":disabled")
+
+// loggerKey carries the application's logger to Emit, set by the plugin in
+// OnBeforeRender. A render without the plugin logs through slog.Default.
+var loggerKey = collage.NewKey[*slog.Logger](Name + ":logger")
+
+func loggerFor(rc *collage.RenderContext) *slog.Logger {
+	if log, ok := loggerKey.Get(rc); ok && log != nil {
+		return log
+	}
+	return slog.Default()
+}
 
 func disabledFor(rc *collage.RenderContext) bool {
 	disabled, _ := disabledKey.Get(rc)
@@ -113,13 +126,14 @@ func marshalNode(node Node) (template.HTML, error) {
 	return template.HTML(block.String()), nil // any: a script element this package assembled from escaped JSON
 }
 
-// Config is the plugin's configuration.
-type Config struct {
-	// SiteName and SiteURL describe the site. When SiteName is set, a WebSite node
-	// is declared on every page — as a default, which a page emitting its own
-	// WebSite replaces.
+// Options configures the plugin. Its section of the application's plugin
+// configuration is decoded over it.
+type Options struct {
+	// SiteName names the site. When it is set, a WebSite node is declared on
+	// every page — as a default, which a page emitting its own WebSite replaces.
+	// Its url is the application's origin, collage.BaseURL, and is left out when
+	// the application has none.
 	SiteName string `json:"siteName"`
-	SiteURL  string `json:"siteURL"`
 	// SearchURL is a search endpoint with "{query}" where the term goes. It is part
 	// of the WebSite node, and ignored without SiteName.
 	SearchURL string `json:"searchURL"`
@@ -133,24 +147,21 @@ type Config struct {
 // Emit, which needs no plugin at all — registering this one is how a site gets its
 // WebSite node without every page repeating it.
 type Plugin struct {
-	cfg Config
-	log *slog.Logger
+	opts Options
+	log  *slog.Logger
 }
 
-// New returns a plugin configured entirely from the application.
-func New() *Plugin { return &Plugin{} }
-
-// NewWith returns a plugin with cfg as its starting point, which the application's
+// New returns a plugin with opts as its starting point, which the application's
 // own configuration is then decoded over.
-func NewWith(cfg Config) *Plugin { return &Plugin{cfg: cfg} }
+func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string    { return Name }
-func (p *Plugin) Version() string { return "0.2.10" }
+func (p *Plugin) Version() string { return "0.3.0" }
 
 func (p *Plugin) Init(_ context.Context, host collage.Host) error {
 	p.log = host.Logger()
 	var err error
-	p.cfg, err = collage.PluginConfig(host, p.cfg)
+	p.opts, err = collage.PluginConfig(host, p.opts)
 	return err
 }
 
@@ -166,14 +177,17 @@ func (p *Plugin) OnBeforeRender(_ context.Context, ev *collage.BeforeRenderEvent
 	if ev.Context == nil {
 		return nil
 	}
-	if p.cfg.Disabled {
+	if p.log != nil {
+		loggerKey.Set(ev.Context, p.log)
+	}
+	if p.opts.Disabled {
 		// Marked before any fragment runs, so every Emit this render sees it.
 		disabledKey.Set(ev.Context, true)
 		return nil
 	}
-	if p.cfg.SiteName == "" {
+	if p.opts.SiteName == "" {
 		return nil
 	}
-	Emit(ev.Context, WebSite{Name: p.cfg.SiteName, URL: p.cfg.SiteURL, SearchURL: p.cfg.SearchURL})
+	Emit(ev.Context, WebSite{Name: p.opts.SiteName, URL: collage.BaseURL(ev.Context), SearchURL: p.opts.SearchURL})
 	return nil
 }
