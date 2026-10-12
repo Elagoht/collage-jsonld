@@ -177,6 +177,9 @@ hole. `TestPlugin_ClosingScriptTagInContentCannotEscape` is what notices.
 - `siteURL` (`Config.SiteURL`) is removed; an old configuration naming it stops
   at start with "unknown key". The WebSite node's `url` is the application's
   origin (`collage.BaseURL`): set `BaseURL` in the application instead.
+  `BaseURL` is a bare origin, so a `siteURL` that carried a path
+  (`https://example.com/blog`) becomes the origin alone
+  (`https://example.com`).
 - `HoistArea` is unexported; the layout still writes `{{hoist "head"}}`.
 - A node dropped because it cannot be marshalled is logged as a warning.
 - Requires collage v0.61.0.

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/Elagoht/collage/pkg/collage"
@@ -582,5 +583,33 @@ func TestPlugin_LogsADroppedNode(t *testing.T) {
 	}
 	if !site.Logs.Has(slog.LevelWarn, "jsonld", "Event") {
 		t.Errorf("the dropped node was not logged:\n%s", site.Logs)
+	}
+}
+
+// The plugin has no Configure phase, so registering it after collage.New, with
+// RegisterPlugin, works as Config.Plugins does.
+func TestPlugin_RegisterPlugin(t *testing.T) {
+	app, err := collage.New(&collage.Config{
+		Template: collage.TemplateConfig{FS: fstest.MapFS{
+			"layouts/main.html":  {Data: []byte(templates["layouts/main.html"])},
+			"pages/article.html": {Data: []byte(templates["pages/article.html"])},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RegisterPlugin(jsonld.New(jsonld.Options{SiteName: "The Wire"})); err != nil {
+		t.Fatalf("RegisterPlugin: %v", err)
+	}
+	layout := collage.NewFragment("layout", "layouts/main.html").WithSlot("content", collage.SlotRequired, collage.SlotSingle).Build()
+	page := collage.NewPage("article").WithLayouts(layout).
+		WithContent(collage.NewFragment("article", "pages/article.html").Build()).
+		WithPath("en", "/article").Build()
+	if err := app.RegisterPage(page); err != nil {
+		t.Fatal(err)
+	}
+	nodes := blocks(t, get(t, app.Handler(), "/article"))
+	if len(nodes) != 1 || nodes[0]["name"] != "The Wire" {
+		t.Errorf("nodes = %v, want the WebSite", nodes)
 	}
 }
