@@ -45,7 +45,7 @@ func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext)) 
 		}
 	}
 
-	layout := collage.NewFragment("layout", "layouts/main.html").WithSlot("content", true, false).Build()
+	layout := collage.NewFragment("layout", "layouts/main.html").WithSlot("content", collage.SlotRequired, collage.SlotSingle).Build()
 	article := collage.NewPage("article").
 		WithLayouts(layout).
 		WithContent(collage.NewFragment("article", "pages/article.html").
@@ -66,7 +66,7 @@ func newSite(t *testing.T, p collage.Plugin, emit func(*collage.RenderContext)) 
 	// inventing a place to write.
 	bare := collage.NewPage("bare").
 		WithLayouts(collage.NewFragment("bare-layout", "layouts/bare.html").
-			WithSlot("content", true, false).
+			WithSlot("content", collage.SlotRequired, collage.SlotSingle).
 			Build()).
 		WithContent(collage.NewFragment("bare", "pages/bare.html").
 			WithData(collage.Effect(func(_ context.Context, rc *collage.RenderContext) error {
