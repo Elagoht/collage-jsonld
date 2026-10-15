@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -611,5 +612,133 @@ func TestPlugin_RegisterPlugin(t *testing.T) {
 	nodes := blocks(t, get(t, app.Handler(), "/article"))
 	if len(nodes) != 1 || nodes[0]["name"] != "The Wire" {
 		t.Errorf("nodes = %v, want the WebSite", nodes)
+	}
+}
+
+func TestPlugin_KeyedNodesOfOneTypeEachGetABlock(t *testing.T) {
+	// The people on an about page are each a Person. Emitted one call at a time,
+	// as a loop over them does, every one with its own Key stays; the same Key
+	// twice in one fragment keeps the later declaration.
+	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
+		for _, name := range []string{"Noor Haddad", "Ada Brandt", "Kemal Sarı"} {
+			jsonld.Emit(rc, jsonld.Person{Key: name, Name: name})
+		}
+		jsonld.Emit(rc, jsonld.Person{Key: "Ada Brandt", Name: "Ada Brandt", JobTitle: "Editor"})
+	})
+
+	var names []string
+	for _, node := range blocks(t, get(t, site, "/article")) {
+		if node["@type"] != "Person" {
+			continue
+		}
+		name, _ := node["name"].(string)
+		names = append(names, name)
+		if name == "Ada Brandt" && node["jobTitle"] != "Editor" {
+			t.Errorf("Ada Brandt = %v, want the later declaration", node)
+		}
+		if _, ok := node["Key"]; ok {
+			t.Errorf("Key was written to the page: %v", node)
+		}
+	}
+	want := []string{"Noor Haddad", "Ada Brandt", "Kemal Sarı"}
+	if !slices.Equal(names, want) {
+		t.Errorf("people = %v, want %v", names, want)
+	}
+}
+
+func TestPlugin_UnkeyedNodesOfOneTypeAreOne(t *testing.T) {
+	// Without a Key a type is one node per page, as it always was: the later
+	// declaration replaces the earlier.
+	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
+		jsonld.Emit(rc, jsonld.Person{Name: "Noor Haddad"}, jsonld.Person{Name: "Ada Brandt"})
+	})
+
+	var people []map[string]any // any: what encoding/json decodes into
+	for _, node := range blocks(t, get(t, site, "/article")) {
+		if node["@type"] == "Person" {
+			people = append(people, node)
+		}
+	}
+	if len(people) != 1 || people[0]["name"] != "Ada Brandt" {
+		t.Errorf("people = %v, want only Ada Brandt", people)
+	}
+}
+
+func TestNode_IDIsWrittenAsAtID(t *testing.T) {
+	cases := []struct {
+		name string
+		node jsonld.Node
+		want string
+	}{
+		{
+			name: "person",
+			node: jsonld.Person{ID: "https://example.com/#noor", Key: "noor", Name: "Noor Haddad"},
+			want: `{"@context":"https://schema.org","@id":"https://example.com/#noor","@type":"Person","name":"Noor Haddad"}`,
+		},
+		{
+			name: "website",
+			node: jsonld.WebSite{ID: "https://example.com/#site", Name: "The Wire"},
+			want: `{"@context":"https://schema.org","@id":"https://example.com/#site","@type":"WebSite","name":"The Wire"}`,
+		},
+		{
+			name: "article",
+			node: jsonld.Article{ID: "https://example.com/a#article", Headline: "x"},
+			want: `{"@context":"https://schema.org","@id":"https://example.com/a#article","@type":"Article","headline":"x"}`,
+		},
+		{
+			name: "blog posting",
+			node: jsonld.BlogPosting{ID: "https://example.com/p#post", Headline: "y"},
+			want: `{"@context":"https://schema.org","@id":"https://example.com/p#post","@type":"BlogPosting","headline":"y"}`,
+		},
+		{
+			name: "blog and its post",
+			node: jsonld.Blog{ID: "https://example.com/#blog", Name: "Notes",
+				Posts: []jsonld.BlogPosting{{ID: "https://example.com/p#post", Headline: "y"}}},
+			want: `{"@context":"https://schema.org","@id":"https://example.com/#blog","@type":"Blog","name":"Notes",` +
+				`"blogPost":[{"@id":"https://example.com/p#post","@type":"BlogPosting","headline":"y"}]}`,
+		},
+		{
+			name: "breadcrumbs",
+			node: jsonld.BreadcrumbList{ID: "https://example.com/a#crumbs"},
+			want: `{"@context":"https://schema.org","@id":"https://example.com/a#crumbs","@type":"BreadcrumbList","itemListElement":[]}`,
+		},
+		{
+			name: "no id",
+			node: jsonld.Person{Key: "noor", Name: "Noor Haddad"},
+			want: `{"@context":"https://schema.org","@type":"Person","name":"Noor Haddad"}`,
+		},
+		{
+			name: "raw keeps its own @id and drops its Key",
+			node: jsonld.Raw{SchemaType: "Event", Key: "e1", JSON: []byte(`{"@id":"https://example.com/#e1","@type":"Event"}`)},
+			want: `{"@context":"https://schema.org","@id":"https://example.com/#e1","@type":"Event"}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := marshal(t, tc.node); got != tc.want {
+				t.Errorf("got  %s\nwant %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPlugin_RawNodesWithKeysEachGetABlock(t *testing.T) {
+	// Raw is keyed by its SchemaType and Key like the others. A Key holding the
+	// separator is still one Key.
+	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
+		jsonld.Emit(rc,
+			jsonld.Raw{SchemaType: "Event", Key: `a#"b`, JSON: []byte(`{"@type":"Event","name":"one"}`)},
+			jsonld.Raw{SchemaType: "Event", Key: "a", JSON: []byte(`{"@type":"Event","name":"two"}`)},
+		)
+	})
+
+	events := 0
+	for _, node := range blocks(t, get(t, site, "/article")) {
+		if node["@type"] == "Event" {
+			events++
+		}
+	}
+	if events != 2 {
+		t.Errorf("got %d Event blocks, want 2", events)
 	}
 }

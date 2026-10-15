@@ -33,6 +33,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/Elagoht/collage/pkg/collage"
@@ -52,10 +53,12 @@ const hoistArea = "head"
 // An earlier version collected here and spliced the finished HTML in AfterRender,
 // which worked and quietly decided a layout question on the layout's behalf.
 //
-// One key per schema.org type, so a nested fragment's Article replaces the one a
-// layout declared rather than sitting beside it — the innermost declaration of a key
-// wins, which is what "more specific" means here. Two nodes of different types both
-// appear.
+// A node's key is its schema.org type plus its Key field, so a nested fragment's
+// Article replaces the one a layout declared rather than sitting beside it — the
+// innermost declaration of a key wins, which is what "more specific" means here.
+// Two nodes of different types both appear, and so do two of one type with
+// different Keys: the people on an about page are each a Person. A Node this
+// package does not define has no Key and is keyed by its type alone.
 func Emit(rc *collage.RenderContext, nodes ...Node) {
 	if rc == nil || disabledFor(rc) {
 		return
@@ -71,8 +74,24 @@ func Emit(rc *collage.RenderContext, nodes ...Node) {
 				"type", node.Type(), "error", err)
 			continue
 		}
-		rc.Hoist(hoistArea, Name+":"+node.Type(), encoded)
+		rc.Hoist(hoistArea, hoistKey(node), encoded)
 	}
+}
+
+// keyed is the nodes of this package, which carry a Key. It is unexported, and
+// not part of Node, so adding it took nothing from a Node an application wrote.
+type keyed interface {
+	nodeKey() string
+}
+
+// hoistKey is the key node is hoisted under. The Key is quoted, so whatever it
+// holds stays one Key and cannot run into the type's half.
+func hoistKey(node Node) string {
+	key := Name + ":" + node.Type()
+	if k, ok := node.(keyed); ok && k.nodeKey() != "" {
+		key += "#" + strconv.Quote(k.nodeKey())
+	}
+	return key
 }
 
 // disabledKey marks a render the plugin was told to stay out of.
@@ -156,7 +175,7 @@ type Plugin struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string    { return Name }
-func (p *Plugin) Version() string { return "0.3.0" }
+func (p *Plugin) Version() string { return "0.4.0" }
 
 func (p *Plugin) Init(_ context.Context, host collage.Host) error {
 	p.log = host.Logger()

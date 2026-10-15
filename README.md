@@ -53,9 +53,23 @@ worked, and it decided a layout question on the layout's behalf. A layout that n
 calls `{{hoist "head"}}` now gets nothing, which is the right answer rather than a
 missing feature.
 
-One key per schema.org type, so a nested fragment's `Article` replaces one a layout
-declared rather than sitting beside it: the innermost declaration of a key wins. Two
-nodes of different types both appear.
+A node's key is its schema.org type plus its `Key` field, so a nested fragment's
+`Article` replaces one a layout declared rather than sitting beside it: the innermost
+declaration of a key wins. Two nodes of different types both appear, and so do two of
+one type with different `Key`s — the people on an about page are each a `Person`:
+
+```go
+for _, person := range people {
+	jsonld.Emit(rc, jsonld.Person{Key: person.Slug, Name: person.Name})
+}
+```
+
+`Key` is never written to the page; it only tells `Emit` which declarations are the
+same node. Left empty, a type is one node per page, as `WebSite` is, and a second
+`Person` without a `Key` replaces the first. `ID` is something else: it is the node's
+`"@id"`, an IRI naming the thing itself, written to the page and read by consumers.
+Leave it empty unless you have one. `Raw` takes a `Key` too; its `"@id"` goes in its
+JSON.
 
 The plugin itself only declares the site-wide `WebSite` node, from `BeforeRender`,
 where it lands at depth zero — a default any page can replace by emitting its own.
@@ -168,6 +182,14 @@ compacts it — so disabling one layer changes nothing and disabling both opens 
 hole. `TestPlugin_ClosingScriptTagInContentCannotEscape` is what notices.
 
 ## Changes
+
+### v0.4.0
+
+- Every node takes a `Key`, never written to the page: nodes of one type with
+  different `Key`s each get a block, so a loop emitting several `Person`s keeps
+  them all. Without a `Key`, a type is still one node per page.
+- `Article`, `BlogPosting`, `Blog`, `Person`, `WebSite` and `BreadcrumbList` take
+  an `ID`, written as `"@id"`.
 
 ### Changed in v0.3.0
 

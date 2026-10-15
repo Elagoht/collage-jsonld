@@ -41,9 +41,14 @@ type Raw struct {
 	// has, so every node on a page declares it the same way. The other members
 	// keep the order they are written in.
 	JSON json.RawMessage
+	// Key is as on the other nodes: never written, it tells Emit which
+	// declarations are the same node. An "@id" goes in JSON like any other member.
+	Key string
 }
 
 func (r Raw) Type() string { return r.SchemaType }
+
+func (r Raw) nodeKey() string { return r.Key }
 
 // MarshalJSON writes "@context" first and then the caller's members in the order
 // the caller wrote them.
@@ -103,6 +108,15 @@ func (r Raw) MarshalJSON() ([]byte, error) {
 
 // Article is a piece of writing: schema.org/Article.
 type Article struct {
+	// ID is the node's "@id": an IRI naming the thing itself, which is how a
+	// consumer tells two mentions of one entity from two entities. Left empty, the
+	// node has no "@id".
+	ID string
+	// Key tells Emit which declarations are the same node. It is never written to
+	// the page. Nodes of one type with different keys all appear; the same key
+	// declared twice keeps the innermost. Empty is a key too: a type emitted
+	// without one is a single node per page, as WebSite is.
+	Key           string
 	Headline      string
 	Description   string
 	URL           string
@@ -120,6 +134,8 @@ type Article struct {
 
 func (Article) Type() string { return "Article" }
 
+func (a Article) nodeKey() string { return a.Key }
+
 func (a Article) MarshalJSON() ([]byte, error) {
 	out := a.wire("Article")
 	out.Context = schemaContext
@@ -130,6 +146,7 @@ func (a Article) MarshalJSON() ([]byte, error) {
 // which only a top-level node declares, so a post nested in a Blog leaves it out.
 func (a Article) wire(schemaType string) articleJSON {
 	out := articleJSON{
+		ID:          a.ID,
 		SchemaType:  schemaType,
 		Headline:    a.Headline,
 		Description: a.Description,
@@ -164,6 +181,8 @@ type BlogPosting Article
 
 func (BlogPosting) Type() string { return "BlogPosting" }
 
+func (b BlogPosting) nodeKey() string { return b.Key }
+
 func (b BlogPosting) MarshalJSON() ([]byte, error) {
 	out := Article(b).wire("BlogPosting")
 	out.Context = schemaContext
@@ -172,6 +191,9 @@ func (b BlogPosting) MarshalJSON() ([]byte, error) {
 
 // Blog is the blog itself, typically on its index page: schema.org/Blog.
 type Blog struct {
+	// ID and Key are as on Article.
+	ID            string
+	Key           string
 	Name          string
 	Description   string
 	URL           string
@@ -187,9 +209,12 @@ type Blog struct {
 
 func (Blog) Type() string { return "Blog" }
 
+func (b Blog) nodeKey() string { return b.Key }
+
 func (b Blog) MarshalJSON() ([]byte, error) {
 	out := blogJSON{
 		Context:     schemaContext,
+		ID:          b.ID,
 		SchemaType:  "Blog",
 		Name:        b.Name,
 		Description: b.Description,
@@ -210,6 +235,9 @@ func (b Blog) MarshalJSON() ([]byte, error) {
 // schema.org/Person. An article's author is described by Article's own fields;
 // this is for a page about the person.
 type Person struct {
+	// ID and Key are as on Article.
+	ID          string
+	Key         string
 	Name        string
 	Description string
 	URL         string
@@ -227,9 +255,12 @@ type Person struct {
 
 func (Person) Type() string { return "Person" }
 
+func (p Person) nodeKey() string { return p.Key }
+
 func (p Person) MarshalJSON() ([]byte, error) {
 	out := personJSON{
 		Context:     schemaContext,
+		ID:          p.ID,
 		SchemaType:  "Person",
 		Name:        p.Name,
 		Description: p.Description,
@@ -269,6 +300,9 @@ func publisherNode(name, logo string) *organization {
 
 // WebSite describes the site itself: schema.org/WebSite.
 type WebSite struct {
+	// ID and Key are as on Article.
+	ID   string
+	Key  string
 	Name string
 	URL  string
 	// SearchURL is a search endpoint with "{query}" where the term goes. Setting
@@ -279,8 +313,10 @@ type WebSite struct {
 
 func (WebSite) Type() string { return "WebSite" }
 
+func (w WebSite) nodeKey() string { return w.Key }
+
 func (w WebSite) MarshalJSON() ([]byte, error) {
-	out := webSiteJSON{Context: schemaContext, SchemaType: "WebSite", Name: w.Name, URL: w.URL}
+	out := webSiteJSON{Context: schemaContext, ID: w.ID, SchemaType: "WebSite", Name: w.Name, URL: w.URL}
 	if w.SearchURL != "" {
 		out.PotentialAction = &searchAction{
 			SchemaType: "SearchAction",
@@ -299,10 +335,15 @@ type Breadcrumb struct {
 
 // BreadcrumbList is the trail to the current page: schema.org/BreadcrumbList.
 type BreadcrumbList struct {
+	// ID and Key are as on Article.
+	ID    string
+	Key   string
 	Items []Breadcrumb
 }
 
 func (BreadcrumbList) Type() string { return "BreadcrumbList" }
+
+func (b BreadcrumbList) nodeKey() string { return b.Key }
 
 func (b BreadcrumbList) MarshalJSON() ([]byte, error) {
 	items := make([]listItem, 0, len(b.Items))
@@ -316,6 +357,7 @@ func (b BreadcrumbList) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(breadcrumbJSON{
 		Context:         schemaContext,
+		ID:              b.ID,
 		SchemaType:      "BreadcrumbList",
 		ItemListElement: items,
 	})
@@ -327,6 +369,7 @@ func (b BreadcrumbList) MarshalJSON() ([]byte, error) {
 
 type articleJSON struct {
 	Context       string        `json:"@context,omitempty"` // empty only when nested in a Blog
+	ID            string        `json:"@id,omitempty"`
 	SchemaType    string        `json:"@type"`
 	Headline      string        `json:"headline,omitempty"`
 	Description   string        `json:"description,omitempty"`
@@ -343,6 +386,7 @@ type articleJSON struct {
 
 type blogJSON struct {
 	Context     string        `json:"@context"`
+	ID          string        `json:"@id,omitempty"`
 	SchemaType  string        `json:"@type"`
 	Name        string        `json:"name"`
 	Description string        `json:"description,omitempty"`
@@ -355,6 +399,7 @@ type blogJSON struct {
 
 type personJSON struct {
 	Context     string       `json:"@context"`
+	ID          string       `json:"@id,omitempty"`
 	SchemaType  string       `json:"@type"`
 	Name        string       `json:"name"`
 	Description string       `json:"description,omitempty"`
@@ -387,6 +432,7 @@ type imageObject struct {
 
 type webSiteJSON struct {
 	Context         string        `json:"@context"`
+	ID              string        `json:"@id,omitempty"`
 	SchemaType      string        `json:"@type"`
 	Name            string        `json:"name"`
 	URL             string        `json:"url,omitempty"`
@@ -401,6 +447,7 @@ type searchAction struct {
 
 type breadcrumbJSON struct {
 	Context         string     `json:"@context"`
+	ID              string     `json:"@id,omitempty"`
 	SchemaType      string     `json:"@type"`
 	ItemListElement []listItem `json:"itemListElement"`
 }
