@@ -35,6 +35,11 @@ type Event struct {
 	OrganizerName string
 	OrganizerURL  string
 	Offers        []Offer
+	// Performers are who performs at the event: people, organizations or
+	// performing groups.
+	Performers []Agent
+	// PreviousStartDate is the start date before the event was rescheduled.
+	PreviousStartDate time.Time
 }
 
 func (Event) Type() string { return "Event" }
@@ -52,6 +57,8 @@ func (e Event) MarshalJSON() ([]byte, error) {
 		EventStatus:         string(e.Status),
 		EventAttendanceMode: string(e.AttendanceMode),
 		Organizer:           organizerNode(e.OrganizerName, e.OrganizerURL),
+		Performer:           agents(e.Performers),
+		PreviousStartDate:   dateTime(e.PreviousStartDate),
 	}
 	if !e.StartDate.IsZero() {
 		out.StartDate = e.StartDate.Format(time.RFC3339)
@@ -181,6 +188,8 @@ type eventJSON struct {
 	Location            json.RawMessage `json:"location,omitempty"`
 	Organizer           *organization   `json:"organizer,omitempty"`
 	Offers              []offerJSON     `json:"offers,omitempty"`
+	Performer           []agentJSON     `json:"performer,omitempty"`
+	PreviousStartDate   string          `json:"previousStartDate,omitempty"`
 }
 
 type placeJSON struct {

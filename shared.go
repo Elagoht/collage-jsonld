@@ -82,6 +82,11 @@ type Offer struct {
 	PriceValidUntil time.Time
 	// Category is what kind of offer it is: "Free", "Paid", "Subscription".
 	Category string
+	// ShippingDetails and ReturnPolicy are this offer's, for a merchant listing. A
+	// Product's own ShippingDetails and ReturnPolicy fill in for an offer that
+	// sets none.
+	ShippingDetails []ShippingDetails
+	ReturnPolicy    *ReturnPolicy
 }
 
 func (o Offer) wire() offerJSON {
@@ -93,6 +98,10 @@ func (o Offer) wire() offerJSON {
 		Availability:  string(o.Availability),
 		ItemCondition: string(o.ItemCondition),
 		Category:      o.Category,
+		ReturnPolicy:  o.ReturnPolicy.wire(),
+	}
+	for _, s := range o.ShippingDetails {
+		out.ShippingDetails = append(out.ShippingDetails, s.wire())
 	}
 	if !o.ValidFrom.IsZero() {
 		out.ValidFrom = o.ValidFrom.Format(time.RFC3339)
@@ -113,15 +122,17 @@ func offers(list []Offer) []offerJSON {
 }
 
 type offerJSON struct {
-	SchemaType      string `json:"@type"`
-	URL             string `json:"url,omitempty"`
-	Price           string `json:"price,omitempty"`
-	PriceCurrency   string `json:"priceCurrency,omitempty"`
-	Availability    string `json:"availability,omitempty"`
-	ItemCondition   string `json:"itemCondition,omitempty"`
-	ValidFrom       string `json:"validFrom,omitempty"`
-	PriceValidUntil string `json:"priceValidUntil,omitempty"`
-	Category        string `json:"category,omitempty"`
+	SchemaType      string                `json:"@type"`
+	URL             string                `json:"url,omitempty"`
+	Price           string                `json:"price,omitempty"`
+	PriceCurrency   string                `json:"priceCurrency,omitempty"`
+	Availability    string                `json:"availability,omitempty"`
+	ItemCondition   string                `json:"itemCondition,omitempty"`
+	ValidFrom       string                `json:"validFrom,omitempty"`
+	PriceValidUntil string                `json:"priceValidUntil,omitempty"`
+	Category        string                `json:"category,omitempty"`
+	ShippingDetails []productShippingJSON `json:"shippingDetails,omitempty"`
+	ReturnPolicy    *productReturnJSON    `json:"hasMerchantReturnPolicy,omitempty"`
 }
 
 // Availability is schema.org's ItemAvailability, written as its full IRI.

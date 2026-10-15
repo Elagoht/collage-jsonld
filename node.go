@@ -130,6 +130,20 @@ type Article struct {
 	PublisherLogo string
 	ImageURL      string
 	WordCount     int
+	// Authors are the article's authors beyond AuthorName, or all of them when
+	// AuthorName is empty. With more than AuthorName, "author" is a list.
+	Authors []Agent
+	// ImageURLs are more images of the article — schema.org consumers prefer
+	// several aspect ratios. With any, "image" is a list of URLs, ImageURL first.
+	ImageURLs []string
+	// Speakable are CSS selectors for the parts of the page suited to being read
+	// aloud.
+	Speakable []string
+	// Paywalled marks the article as not free to read; PaywallCSS are the CSS
+	// selectors of the parts behind the paywall. Search engines tell paywalled
+	// content from cloaking by these.
+	Paywalled  bool
+	PaywallCSS []string
 }
 
 func (Article) Type() string { return "Article" }
@@ -154,8 +168,14 @@ func (a Article) wire(schemaType string) articleJSON {
 		Section:     a.Section,
 		Keywords:    a.Keywords,
 		WordCount:   a.WordCount,
-		Author:      authorNode(a.AuthorName, a.AuthorURL),
+		Author:      nodeAuthors(a.AuthorName, a.AuthorURL, a.Authors),
 		Publisher:   publisherNode(a.PublisherName, a.PublisherLogo),
+		Speakable:   nodeSpeakable(a.Speakable),
+		HasPart:     nodePaywallParts(a.PaywallCSS),
+	}
+	if a.Paywalled {
+		free := false
+		out.IsAccessibleForFree = &free
 	}
 	if !a.DatePublished.IsZero() {
 		out.DatePublished = a.DatePublished.Format(time.RFC3339)
@@ -163,8 +183,86 @@ func (a Article) wire(schemaType string) articleJSON {
 	if !a.DateModified.IsZero() {
 		out.DateModified = a.DateModified.Format(time.RFC3339)
 	}
-	if a.ImageURL != "" {
-		out.Image = &imageObject{SchemaType: "ImageObject", URL: a.ImageURL}
+	out.Image = nodeImages(a.ImageURL, a.ImageURLs)
+	return out
+}
+
+// nodeAuthorField is an article's "author": the single object it always was
+// when only AuthorName is set, and a list once Authors adds to it.
+type nodeAuthorField struct {
+	single bool
+	list   []agentJSON
+}
+
+func (f nodeAuthorField) MarshalJSON() ([]byte, error) {
+	if f.single {
+		return json.Marshal(f.list[0])
+	}
+	return json.Marshal(f.list)
+}
+
+func nodeAuthors(name, url string, more []Agent) *nodeAuthorField {
+	var list []agentJSON
+	if name != "" {
+		list = append(list, Agent{Name: name, URL: url}.wire())
+	}
+	list = append(list, agents(more)...)
+	if len(list) == 0 {
+		return nil
+	}
+	return &nodeAuthorField{single: len(more) == 0, list: list}
+}
+
+// nodeImageField is an article's "image": the ImageObject it always was with
+// ImageURL alone, and a list of URLs once ImageURLs adds to it.
+type nodeImageField struct {
+	object *imageObject
+	urls   []string
+}
+
+func (f nodeImageField) MarshalJSON() ([]byte, error) {
+	if f.object != nil {
+		return json.Marshal(f.object)
+	}
+	return json.Marshal(f.urls)
+}
+
+func nodeImages(first string, more []string) *nodeImageField {
+	if len(more) == 0 {
+		if first == "" {
+			return nil
+		}
+		return &nodeImageField{object: &imageObject{SchemaType: "ImageObject", URL: first}}
+	}
+	var urls []string
+	if first != "" {
+		urls = append(urls, first)
+	}
+	return &nodeImageField{urls: append(urls, more...)}
+}
+
+type nodeSpeakableJSON struct {
+	SchemaType  string   `json:"@type"`
+	CSSSelector []string `json:"cssSelector"`
+}
+
+func nodeSpeakable(selectors []string) *nodeSpeakableJSON {
+	if len(selectors) == 0 {
+		return nil
+	}
+	return &nodeSpeakableJSON{SchemaType: "SpeakableSpecification", CSSSelector: selectors}
+}
+
+type nodePaywallPartJSON struct {
+	SchemaType          string `json:"@type"`
+	IsAccessibleForFree bool   `json:"isAccessibleForFree"`
+	CSSSelector         string `json:"cssSelector"`
+}
+
+func nodePaywallParts(selectors []string) []nodePaywallPartJSON {
+	var out []nodePaywallPartJSON
+	for _, sel := range selectors {
+		out = append(out, nodePaywallPartJSON{SchemaType: "WebPageElement", CSSSelector: sel})
 	}
 	return out
 }
@@ -185,6 +283,20 @@ func (b BlogPosting) nodeKey() string { return b.Key }
 
 func (b BlogPosting) MarshalJSON() ([]byte, error) {
 	out := Article(b).wire("BlogPosting")
+	out.Context = schemaContext
+	return json.Marshal(out)
+}
+
+// NewsArticle is a news story: schema.org/NewsArticle. It is Article's own
+// struct under another name, as BlogPosting is, with its own "@type" and key.
+type NewsArticle Article
+
+func (NewsArticle) Type() string { return "NewsArticle" }
+
+func (n NewsArticle) nodeKey() string { return n.Key }
+
+func (n NewsArticle) MarshalJSON() ([]byte, error) {
+	out := Article(n).wire("NewsArticle")
 	out.Context = schemaContext
 	return json.Marshal(out)
 }
@@ -250,7 +362,14 @@ type Person struct {
 	KnowsAbout []string
 	// SameAs are the person's profiles elsewhere, which is how a consumer ties
 	// this page to the same person on other sites.
-	SameAs []string
+	SameAs        []string
+	GivenName     string
+	FamilyName    string
+	AlternateName string
+	Telephone     string
+	// WorksFor is the person's employer; its Kind defaults to Organization.
+	WorksFor Agent
+	Address  *PostalAddress
 }
 
 func (Person) Type() string { return "Person" }
@@ -269,6 +388,18 @@ func (p Person) MarshalJSON() ([]byte, error) {
 		Email:       p.Email,
 		KnowsAbout:  p.KnowsAbout,
 		SameAs:      p.SameAs,
+		GivenName:   p.GivenName,
+		FamilyName:  p.FamilyName,
+		Alternate:   p.AlternateName,
+		Telephone:   p.Telephone,
+		Address:     p.Address.wire(),
+	}
+	if p.WorksFor.Name != "" {
+		employer := p.WorksFor
+		if employer.Kind == "" {
+			employer.Kind = AgentOrganization
+		}
+		out.WorksFor = agentPtr(employer)
 	}
 	if p.ImageURL != "" {
 		out.Image = &imageObject{SchemaType: "ImageObject", URL: p.ImageURL}
@@ -346,8 +477,47 @@ type Organization struct {
 	// SameAs are the organization's profiles elsewhere — its Instagram, its
 	// LinkedIn — which is how a consumer ties this page to the same organization
 	// on other sites.
-	SameAs  []string
-	Address *PostalAddress
+	SameAs        []string
+	Address       *PostalAddress
+	AlternateName string
+	LegalName     string
+	// FoundingDate is written as a date.
+	FoundingDate      time.Time
+	NumberOfEmployees int
+	// The identifiers below are written as given: tax and VAT numbers, the D-U-N-S
+	// number, the Legal Entity Identifier, the NAICS code, the GS1 Global Location
+	// Number and the ISO 6523 identifier.
+	TaxID                string
+	VatID                string
+	DUNS                 string
+	LEICode              string
+	NAICS                string
+	GlobalLocationNumber string
+	ISO6523Code          string
+	// ContactPoints are the ways to reach the organization for a purpose —
+	// customer service, sales.
+	ContactPoints []ContactPoint
+}
+
+// ContactPoint is one way to reach an organization: schema.org/ContactPoint.
+type ContactPoint struct {
+	Telephone string
+	Email     string
+	// ContactType is what the contact point is for: "customer service".
+	ContactType string
+	// AreaServed are the regions served, as ISO 3166-1 codes or names.
+	AreaServed []string
+	// AvailableLanguage are the languages spoken, as names or IETF tags.
+	AvailableLanguage []string
+}
+
+type contactPointJSON struct {
+	SchemaType        string   `json:"@type"`
+	Telephone         string   `json:"telephone,omitempty"`
+	Email             string   `json:"email,omitempty"`
+	ContactType       string   `json:"contactType,omitempty"`
+	AreaServed        []string `json:"areaServed,omitempty"`
+	AvailableLanguage []string `json:"availableLanguage,omitempty"`
 }
 
 func (Organization) Type() string { return "Organization" }
@@ -366,6 +536,29 @@ func (o Organization) MarshalJSON() ([]byte, error) {
 		Telephone:   o.Telephone,
 		SameAs:      o.SameAs,
 		Address:     o.Address.wire(),
+		Alternate:   o.AlternateName,
+		LegalName:   o.LegalName,
+		Founding:    date(o.FoundingDate),
+		TaxID:       o.TaxID,
+		VatID:       o.VatID,
+		DUNS:        o.DUNS,
+		LEICode:     o.LEICode,
+		NAICS:       o.NAICS,
+		GLN:         o.GlobalLocationNumber,
+		ISO6523:     o.ISO6523Code,
+	}
+	if o.NumberOfEmployees > 0 {
+		out.Employees = &nodeQuantityJSON{SchemaType: "QuantitativeValue", Value: o.NumberOfEmployees}
+	}
+	for _, c := range o.ContactPoints {
+		out.ContactPoint = append(out.ContactPoint, contactPointJSON{
+			SchemaType:        "ContactPoint",
+			Telephone:         c.Telephone,
+			Email:             c.Email,
+			ContactType:       c.ContactType,
+			AreaServed:        c.AreaServed,
+			AvailableLanguage: c.AvailableLanguage,
+		})
 	}
 	if o.LogoURL != "" {
 		out.Logo = &imageObject{SchemaType: "ImageObject", URL: o.LogoURL}
@@ -450,20 +643,23 @@ func (b BreadcrumbList) MarshalJSON() ([]byte, error) {
 // the wire uses schema.org's.
 
 type articleJSON struct {
-	Context       string        `json:"@context,omitempty"` // empty only when nested in a Blog
-	ID            string        `json:"@id,omitempty"`
-	SchemaType    string        `json:"@type"`
-	Headline      string        `json:"headline,omitempty"`
-	Description   string        `json:"description,omitempty"`
-	URL           string        `json:"url,omitempty"`
-	Section       string        `json:"articleSection,omitempty"`
-	Keywords      []string      `json:"keywords,omitempty"`
-	DatePublished string        `json:"datePublished,omitempty"`
-	DateModified  string        `json:"dateModified,omitempty"`
-	WordCount     int           `json:"wordCount,omitempty"`
-	Author        *person       `json:"author,omitempty"`
-	Publisher     *organization `json:"publisher,omitempty"`
-	Image         *imageObject  `json:"image,omitempty"`
+	Context             string                `json:"@context,omitempty"` // empty only when nested in a Blog
+	ID                  string                `json:"@id,omitempty"`
+	SchemaType          string                `json:"@type"`
+	Headline            string                `json:"headline,omitempty"`
+	Description         string                `json:"description,omitempty"`
+	URL                 string                `json:"url,omitempty"`
+	Section             string                `json:"articleSection,omitempty"`
+	Keywords            []string              `json:"keywords,omitempty"`
+	DatePublished       string                `json:"datePublished,omitempty"`
+	DateModified        string                `json:"dateModified,omitempty"`
+	WordCount           int                   `json:"wordCount,omitempty"`
+	Author              *nodeAuthorField      `json:"author,omitempty"`
+	Publisher           *organization         `json:"publisher,omitempty"`
+	Image               *nodeImageField       `json:"image,omitempty"`
+	Speakable           *nodeSpeakableJSON    `json:"speakable,omitempty"`
+	IsAccessibleForFree *bool                 `json:"isAccessibleForFree,omitempty"`
+	HasPart             []nodePaywallPartJSON `json:"hasPart,omitempty"`
 }
 
 type blogJSON struct {
@@ -480,17 +676,23 @@ type blogJSON struct {
 }
 
 type personJSON struct {
-	Context     string       `json:"@context"`
-	ID          string       `json:"@id,omitempty"`
-	SchemaType  string       `json:"@type"`
-	Name        string       `json:"name"`
-	Description string       `json:"description,omitempty"`
-	URL         string       `json:"url,omitempty"`
-	Image       *imageObject `json:"image,omitempty"`
-	JobTitle    string       `json:"jobTitle,omitempty"`
-	Email       string       `json:"email,omitempty"`
-	KnowsAbout  []string     `json:"knowsAbout,omitempty"`
-	SameAs      []string     `json:"sameAs,omitempty"`
+	Context     string             `json:"@context"`
+	ID          string             `json:"@id,omitempty"`
+	SchemaType  string             `json:"@type"`
+	Name        string             `json:"name"`
+	Description string             `json:"description,omitempty"`
+	URL         string             `json:"url,omitempty"`
+	Image       *imageObject       `json:"image,omitempty"`
+	JobTitle    string             `json:"jobTitle,omitempty"`
+	Email       string             `json:"email,omitempty"`
+	KnowsAbout  []string           `json:"knowsAbout,omitempty"`
+	SameAs      []string           `json:"sameAs,omitempty"`
+	GivenName   string             `json:"givenName,omitempty"`
+	FamilyName  string             `json:"familyName,omitempty"`
+	Alternate   string             `json:"alternateName,omitempty"`
+	Telephone   string             `json:"telephone,omitempty"`
+	WorksFor    *agentJSON         `json:"worksFor,omitempty"`
+	Address     *postalAddressJSON `json:"address,omitempty"`
 }
 
 // person is an author nested in another node; Person is one emitted in its own
@@ -543,17 +745,34 @@ type listItem struct {
 }
 
 type organizationJSON struct {
-	Context     string             `json:"@context"`
-	ID          string             `json:"@id,omitempty"`
-	SchemaType  string             `json:"@type"`
-	Name        string             `json:"name"`
-	Description string             `json:"description,omitempty"`
-	URL         string             `json:"url,omitempty"`
-	Logo        *imageObject       `json:"logo,omitempty"`
-	Email       string             `json:"email,omitempty"`
-	Telephone   string             `json:"telephone,omitempty"`
-	SameAs      []string           `json:"sameAs,omitempty"`
-	Address     *postalAddressJSON `json:"address,omitempty"`
+	Context      string             `json:"@context"`
+	ID           string             `json:"@id,omitempty"`
+	SchemaType   string             `json:"@type"`
+	Name         string             `json:"name"`
+	Description  string             `json:"description,omitempty"`
+	URL          string             `json:"url,omitempty"`
+	Logo         *imageObject       `json:"logo,omitempty"`
+	Email        string             `json:"email,omitempty"`
+	Telephone    string             `json:"telephone,omitempty"`
+	SameAs       []string           `json:"sameAs,omitempty"`
+	Address      *postalAddressJSON `json:"address,omitempty"`
+	Alternate    string             `json:"alternateName,omitempty"`
+	LegalName    string             `json:"legalName,omitempty"`
+	Founding     string             `json:"foundingDate,omitempty"`
+	Employees    *nodeQuantityJSON  `json:"numberOfEmployees,omitempty"`
+	TaxID        string             `json:"taxID,omitempty"`
+	VatID        string             `json:"vatID,omitempty"`
+	DUNS         string             `json:"duns,omitempty"`
+	LEICode      string             `json:"leiCode,omitempty"`
+	NAICS        string             `json:"naics,omitempty"`
+	GLN          string             `json:"globalLocationNumber,omitempty"`
+	ISO6523      string             `json:"iso6523Code,omitempty"`
+	ContactPoint []contactPointJSON `json:"contactPoint,omitempty"`
+}
+
+type nodeQuantityJSON struct {
+	SchemaType string `json:"@type"`
+	Value      int    `json:"value"`
 }
 
 type faqPageJSON struct {
@@ -573,3 +792,5 @@ type answerJSON struct {
 	SchemaType string `json:"@type"`
 	Text       string `json:"text"`
 }
+
+var _ keyed = NewsArticle{}
