@@ -327,6 +327,88 @@ func (w WebSite) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
+// Organization is a company, a community, a publisher in its own right:
+// schema.org/Organization. Article's publisher is described by Article's own
+// fields; this is for the organization behind the site, or a page about one.
+type Organization struct {
+	// ID and Key are as on Article.
+	ID          string
+	Key         string
+	Name        string
+	Description string
+	URL         string
+	LogoURL     string
+	// Email is written as given; schema.org takes the plain address.
+	Email string
+	// Telephone is written as given; the international form, "+90 212 …", is
+	// the one consumers read without guessing.
+	Telephone string
+	// SameAs are the organization's profiles elsewhere — its Instagram, its
+	// LinkedIn — which is how a consumer ties this page to the same organization
+	// on other sites.
+	SameAs  []string
+	Address *PostalAddress
+}
+
+func (Organization) Type() string { return "Organization" }
+
+func (o Organization) nodeKey() string { return o.Key }
+
+func (o Organization) MarshalJSON() ([]byte, error) {
+	out := organizationJSON{
+		Context:     schemaContext,
+		ID:          o.ID,
+		SchemaType:  "Organization",
+		Name:        o.Name,
+		Description: o.Description,
+		URL:         o.URL,
+		Email:       o.Email,
+		Telephone:   o.Telephone,
+		SameAs:      o.SameAs,
+		Address:     o.Address.wire(),
+	}
+	if o.LogoURL != "" {
+		out.Logo = &imageObject{SchemaType: "ImageObject", URL: o.LogoURL}
+	}
+	return json.Marshal(out)
+}
+
+// FAQPage is a page of questions and their answers: schema.org/FAQPage.
+type FAQPage struct {
+	// ID and Key are as on Article.
+	ID        string
+	Key       string
+	Questions []Question
+}
+
+// Question is one entry on an FAQPage. Answer is text; search engines show it
+// as written, so keep markup out of it.
+type Question struct {
+	Question string
+	Answer   string
+}
+
+func (FAQPage) Type() string { return "FAQPage" }
+
+func (f FAQPage) nodeKey() string { return f.Key }
+
+func (f FAQPage) MarshalJSON() ([]byte, error) {
+	entities := make([]questionJSON, 0, len(f.Questions))
+	for _, q := range f.Questions {
+		entities = append(entities, questionJSON{
+			SchemaType:     "Question",
+			Name:           q.Question,
+			AcceptedAnswer: answerJSON{SchemaType: "Answer", Text: q.Answer},
+		})
+	}
+	return json.Marshal(faqPageJSON{
+		Context:    schemaContext,
+		ID:         f.ID,
+		SchemaType: "FAQPage",
+		MainEntity: entities,
+	})
+}
+
 // Breadcrumb is one step in a trail.
 type Breadcrumb struct {
 	Name string
@@ -422,6 +504,7 @@ type person struct {
 type organization struct {
 	SchemaType string       `json:"@type"`
 	Name       string       `json:"name"`
+	URL        string       `json:"url,omitempty"`
 	Logo       *imageObject `json:"logo,omitempty"`
 }
 
@@ -457,4 +540,36 @@ type listItem struct {
 	Position   int    `json:"position"`
 	Name       string `json:"name"`
 	Item       string `json:"item,omitempty"`
+}
+
+type organizationJSON struct {
+	Context     string             `json:"@context"`
+	ID          string             `json:"@id,omitempty"`
+	SchemaType  string             `json:"@type"`
+	Name        string             `json:"name"`
+	Description string             `json:"description,omitempty"`
+	URL         string             `json:"url,omitempty"`
+	Logo        *imageObject       `json:"logo,omitempty"`
+	Email       string             `json:"email,omitempty"`
+	Telephone   string             `json:"telephone,omitempty"`
+	SameAs      []string           `json:"sameAs,omitempty"`
+	Address     *postalAddressJSON `json:"address,omitempty"`
+}
+
+type faqPageJSON struct {
+	Context    string         `json:"@context"`
+	ID         string         `json:"@id,omitempty"`
+	SchemaType string         `json:"@type"`
+	MainEntity []questionJSON `json:"mainEntity"`
+}
+
+type questionJSON struct {
+	SchemaType     string     `json:"@type"`
+	Name           string     `json:"name"`
+	AcceptedAnswer answerJSON `json:"acceptedAnswer"`
+}
+
+type answerJSON struct {
+	SchemaType string `json:"@type"`
+	Text       string `json:"text"`
 }

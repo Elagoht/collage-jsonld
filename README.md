@@ -81,8 +81,8 @@ JSON-LD is open-ended, so the obvious shape is `map[string]any` — and then not
 catches a misspelled property, the compiler has nothing to say about a missing one,
 and every application invents its own spelling of the same vocabulary.
 
-`Article`, `BlogPosting`, `Blog`, `Person`, `WebSite` and `BreadcrumbList` cover
-what a content site actually emits. `Raw` is the escape hatch for anything else,
+`Article`, `BlogPosting`, `Blog`, `Person`, `Organization`, `Event`, `FAQPage`,
+`WebSite` and `BreadcrumbList` cover what a content site actually emits. `Raw` is the escape hatch for anything else,
 and it makes the escape explicit rather than making it the default — it also
 refuses invalid JSON, because an unparseable block inside a `<script>` tag can make
 a consumer discard every other node on the page with it.
@@ -139,6 +139,49 @@ jsonld.Emit(rc, jsonld.Person{
 An article's author stays `Article`'s own `AuthorName` and `AuthorURL`; `Person` is
 for a page about the person.
 
+### An organization, its events, its questions
+
+`Organization` is the organization behind the site, or a page about one — `name`,
+`description`, `url`, `logo`, `email`, `telephone`, `sameAs` and a postal
+`address`:
+
+```go
+jsonld.Emit(rc, jsonld.Organization{
+	Name:      "OSE",
+	URL:       "https://ose.example",
+	LogoURL:   "https://ose.example/logo.png",
+	Telephone: "+90 212 000 00 00",
+	SameAs:    []string{"https://instagram.com/ose"},
+	Address:   &jsonld.PostalAddress{Locality: "Kadıköy", Region: "İstanbul", Country: "TR"},
+})
+```
+
+`Event` needs a name, a start date and a location before a search engine shows
+it. The location is a `Place`, an `OnlineURL`, or both for a mixed event — one is
+written as an object and two as a list. `Status`, `AttendanceMode` and an offer's
+`Availability` are typed constants written as schema.org's own IRIs, and an
+offer's `Price` is a string, so a free event's `"0"` is written rather than lost:
+
+```go
+tr, _ := time.LoadLocation("Europe/Istanbul")
+jsonld.Emit(rc, jsonld.Event{
+	Key:            event.Slug,
+	Name:           event.Title,
+	StartDate:      event.StartsAt.In(tr),
+	AttendanceMode: jsonld.AttendanceOffline,
+	Place:          &jsonld.Place{Name: "Kültür Merkezi", Address: &jsonld.PostalAddress{Locality: "Kadıköy", Country: "TR"}},
+	OrganizerName:  "OSE",
+	Offers:         []jsonld.Offer{{Price: "0", Currency: "TRY", Availability: jsonld.InStock}},
+})
+```
+
+Times are written with their own offset, so they are only as right as the
+`time.Time`. A wall-clock time read without a zone — `"2026-11-07 19:00"` parsed
+with `time.Parse`, which means UTC — is three hours off in Istanbul; read it with
+`time.ParseInLocation` and the event's location.
+
+`FAQPage` is a page of `Questions`, each with its `Answer` as plain text.
+
 ## Configuration
 
 ```json
@@ -182,6 +225,12 @@ compacts it — so disabling one layer changes nothing and disabling both opens 
 hole. `TestPlugin_ClosingScriptTagInContentCannotEscape` is what notices.
 
 ## Changes
+
+### v0.5.0
+
+- `Organization`, `Event` (with `Place`, `PostalAddress`, `Offer` and the
+  `EventStatus`, `AttendanceMode` and `Availability` constants) and `FAQPage`.
+  Each takes an `ID` and a `Key` like the others.
 
 ### v0.4.0
 

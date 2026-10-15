@@ -84,6 +84,21 @@ type keyed interface {
 	nodeKey() string
 }
 
+// Every node this package defines is keyed. One that is not would collapse a loop
+// of them into the last, which is the bug Key exists to fix.
+var (
+	_ keyed = Raw{}
+	_ keyed = Article{}
+	_ keyed = BlogPosting{}
+	_ keyed = Blog{}
+	_ keyed = Person{}
+	_ keyed = Organization{}
+	_ keyed = WebSite{}
+	_ keyed = BreadcrumbList{}
+	_ keyed = Event{}
+	_ keyed = FAQPage{}
+)
+
 // hoistKey is the key node is hoisted under. The Key is quoted, so whatever it
 // holds stays one Key and cannot run into the type's half.
 func hoistKey(node Node) string {
@@ -175,7 +190,7 @@ type Plugin struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string    { return Name }
-func (p *Plugin) Version() string { return "0.4.0" }
+func (p *Plugin) Version() string { return "0.5.0" }
 
 func (p *Plugin) Init(_ context.Context, host collage.Host) error {
 	p.log = host.Logger()
