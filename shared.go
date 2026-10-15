@@ -17,10 +17,16 @@ import (
 // schema.org/Person, Organization or PerformingGroup, by name and, optionally, a
 // URL.
 type Agent struct {
-	// Kind is the agent's schema.org type; empty is AgentPerson.
+	// Kind is the agent's schema.org type; empty is AgentPerson, except where a
+	// field says otherwise — a hiring organization is an Organization unless told.
 	Kind AgentKind
 	Name string
 	URL  string
+	// SameAs are the agent's profiles elsewhere, which tie it to the same person
+	// or organization on other sites.
+	SameAs []string
+	// LogoURL is an organization's logo; it is written as "logo".
+	LogoURL string
 }
 
 // AgentKind is the schema.org type of an Agent.
@@ -33,17 +39,60 @@ const (
 )
 
 type agentJSON struct {
-	SchemaType string `json:"@type"`
-	Name       string `json:"name"`
-	URL        string `json:"url,omitempty"`
+	SchemaType string       `json:"@type"`
+	Name       string       `json:"name"`
+	URL        string       `json:"url,omitempty"`
+	SameAs     []string     `json:"sameAs,omitempty"`
+	Logo       *imageObject `json:"logo,omitempty"`
 }
 
 func (a Agent) wire() agentJSON {
+	return a.wireAs(AgentPerson)
+}
+
+// wireAs is the agent's wire form with fallback as its type when Kind is empty.
+func (a Agent) wireAs(fallback AgentKind) agentJSON {
 	kind := a.Kind
 	if kind == "" {
-		kind = AgentPerson
+		kind = fallback
 	}
-	return agentJSON{SchemaType: string(kind), Name: a.Name, URL: a.URL}
+	out := agentJSON{SchemaType: string(kind), Name: a.Name, URL: a.URL, SameAs: a.SameAs}
+	if a.LogoURL != "" {
+		out.Logo = &imageObject{SchemaType: "ImageObject", URL: a.LogoURL}
+	}
+	return out
+}
+
+// organizationAgent is a's wire form as an Organization unless Kind says
+// otherwise, nil without a name.
+func organizationAgent(a Agent) *agentJSON {
+	if a.Name == "" {
+		return nil
+	}
+	out := a.wireAs(AgentOrganization)
+	return &out
+}
+
+// Money is an amount in a currency: schema.org/MonetaryAmount.
+type Money struct {
+	// Value is a string so that "0" is written; use a dot for decimals.
+	Value string
+	// Currency is an ISO 4217 code: "TRY".
+	Currency string
+}
+
+type moneyJSON struct {
+	SchemaType string `json:"@type"`
+	Value      string `json:"value"`
+	Currency   string `json:"currency,omitempty"`
+}
+
+// wire is nil for nil, so the property is left out.
+func (m *Money) wire() *moneyJSON {
+	if m == nil {
+		return nil
+	}
+	return &moneyJSON{SchemaType: "MonetaryAmount", Value: m.Value, Currency: m.Currency}
 }
 
 // agents is the wire form of a list of agents, leaving out any without a name,
@@ -288,6 +337,9 @@ type Review struct {
 	DatePublished time.Time
 	// Publisher is the site the review appeared on, when it is not the author's.
 	Publisher Agent
+	// ContentReferenceTime is when the reviewed experience happened — the stay,
+	// the meal — which a vacation rental's reviews must carry in some countries.
+	ContentReferenceTime time.Time
 }
 
 func (Review) Type() string { return "Review" }
@@ -316,6 +368,8 @@ func (r Review) wire() reviewJSON {
 		ReviewRating: r.Rating.wire(),
 		ReviewBody:   r.Body,
 		Publisher:    agentPtr(r.Publisher),
+
+		ContentReferenceTime: dateTime(r.ContentReferenceTime),
 	}
 	if !r.DatePublished.IsZero() {
 		out.DatePublished = r.DatePublished.Format(time.RFC3339)
@@ -343,19 +397,31 @@ type reviewJSON struct {
 	ReviewBody    string          `json:"reviewBody,omitempty"`
 	DatePublished string          `json:"datePublished,omitempty"`
 	Publisher     *agentJSON      `json:"publisher,omitempty"`
+
+	ContentReferenceTime string `json:"contentReferenceTime,omitempty"`
 }
 
 // nested is node marshalled for use inside another node: the same object without
 // its "@context", which only a top-level node declares. Its other members keep
 // their order.
+//
+// A nil node, a typed nil among them, is no node: nested returns nil and the
+// property is left out. Its type is never asked for, because asking a typed nil
+// panics.
 func nested(node Node) (json.RawMessage, error) {
+	if isNil(node) {
+		return nil, nil
+	}
 	encoded, err := json.Marshal(node)
 	if err != nil {
 		return nil, err
 	}
+	if bytes.Equal(encoded, []byte("null")) {
+		return nil, nil
+	}
 	dec := json.NewDecoder(bytes.NewReader(encoded))
 	if open, err := dec.Token(); err != nil || open != json.Delim('{') {
-		return nil, fmt.Errorf("jsonld: nested %s node is not a JSON object", node.Type())
+		return nil, fmt.Errorf("jsonld: nested %T node is not a JSON object", node)
 	}
 	var out bytes.Buffer
 	out.WriteByte('{')

@@ -79,14 +79,13 @@ func TestEvent_Marshal(t *testing.T) {
 				Name:           "Game Jam",
 				Description:    "48 saat.",
 				URL:            "https://ose.example/e/jam",
-				ImageURL:       "https://ose.example/jam.png",
+				ImageURLs:      []string{"https://ose.example/jam.png"},
 				StartDate:      start,
 				EndDate:        end,
 				Status:         jsonld.EventScheduled,
 				AttendanceMode: jsonld.AttendanceOffline,
 				Place:          place,
-				OrganizerName:  "OSE",
-				OrganizerURL:   "https://ose.example",
+				Organizer:      jsonld.Agent{Name: "OSE", URL: "https://ose.example"},
 				Offers: []jsonld.Offer{{
 					URL:          "https://ose.example/e/jam/kayit",
 					Price:        "0",
@@ -97,7 +96,7 @@ func TestEvent_Marshal(t *testing.T) {
 			},
 			want: `{"@context":"https://schema.org","@id":"https://ose.example/e/jam#event","@type":"Event",` +
 				`"name":"Game Jam","description":"48 saat.","url":"https://ose.example/e/jam",` +
-				`"image":{"@type":"ImageObject","url":"https://ose.example/jam.png"},` +
+				`"image":["https://ose.example/jam.png"],` +
 				`"startDate":"2026-11-07T19:00:00+03:00","endDate":"2026-11-07T22:00:00+03:00",` +
 				`"eventStatus":"https://schema.org/EventScheduled",` +
 				`"eventAttendanceMode":"https://schema.org/OfflineEventAttendanceMode",` +

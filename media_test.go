@@ -43,7 +43,7 @@ func TestVideoObject_Marshal(t *testing.T) {
 				`"thumbnailUrl":["https://ose.example/t1.jpg","https://ose.example/t2.jpg"],` +
 				`"uploadDate":"2026-11-09T12:00:00+03:00","duration":"PT3M20S",` +
 				`"contentUrl":"https://ose.example/jam.mp4","embedUrl":"https://ose.example/embed/jam",` +
-				`"expires":"2027-11-09T00:00:00+03:00","regionsAllowed":"TR,DE",` +
+				`"expires":"2027-11-09T00:00:00+03:00","regionsAllowed":["TR","DE"],` +
 				`"interactionStatistic":{"@type":"InteractionCounter","interactionType":{"@type":"WatchAction"},"userInteractionCount":1200},` +
 				`"hasPart":[{"@type":"Clip","name":"Açılış","startOffset":0,"endOffset":30,"url":"https://ose.example/v/jam?t=0"}],` +
 				`"publication":{"@type":"BroadcastEvent","isLiveBroadcast":true,` +

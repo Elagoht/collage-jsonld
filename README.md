@@ -81,8 +81,27 @@ JSON-LD is open-ended, so the obvious shape is `map[string]any` — and then not
 catches a misspelled property, the compiler has nothing to say about a missing one,
 and every application invents its own spelling of the same vocabulary.
 
-`Article`, `BlogPosting`, `Blog`, `Person`, `Organization`, `Event`, `FAQPage`,
-`WebSite` and `BreadcrumbList` cover what a content site actually emits. `Raw` is the escape hatch for anything else,
+The typed nodes cover every feature in Google Search's structured data gallery,
+plus the page types schema.org defines around them:
+
+| Feature | Types |
+| --- | --- |
+| Pages and site | `WebSite`, `WebPage` (`AboutPage`, `ContactPage`, `CollectionPage`, `ItemPage`, `SearchResultsPage`, `CheckoutPage` through `Kind`), `ProfilePage`, `BreadcrumbList`, `ItemList` (carousels) |
+| Writing | `Article`, `NewsArticle`, `BlogPosting`, `Blog`, `DiscussionForumPosting`, `QAPage`, `FAQPage` — articles and pages take `Speakable` selectors and `Paywalled`/`PaywallCSS` for subscription content |
+| People and organizations | `Person`, `Organization`, `LocalBusiness` (any subtype through `Kind`), `EmployerAggregateRating` |
+| Events | `Event`, with `Place`, `PostalAddress`, `Offer` and performers |
+| Commerce | `Product` (snippet and merchant listing: shipping, return policy), `SoftwareApplication` (and `MobileApplication`, `WebApplication`, `VideoGame`), `VacationRental`, `Review`, `AggregateRating` |
+| Media | `VideoObject` (clips, live broadcasts), `ImageObject` (image metadata), `Movie`, `Recipe`, `HowTo` |
+| Learning and data | `Course`, `Quiz` (flashcards), `MathSolver`, `Dataset`, `JobPosting` |
+
+Shared parts — `Agent` for anyone who wrote, made or organized something,
+`Offer`, `Rating`, `GeoCoordinates`, `PostalAddress` — mean the same thing in every
+node that takes them. `Review` and `AggregateRating` are nodes of their own, with
+an `ItemReviewed`, and properties of a `Product`, a `Recipe`, a `LocalBusiness`.
+Enumerations — event status, availability, item condition, return policy — are
+typed constants written as schema.org's own IRIs.
+
+`Raw` is the escape hatch for anything else,
 and it makes the escape explicit rather than making it the default — it also
 refuses invalid JSON, because an unparseable block inside a `<script>` tag can make
 a consumer discard every other node on the page with it.
@@ -170,7 +189,7 @@ jsonld.Emit(rc, jsonld.Event{
 	StartDate:      event.StartsAt.In(tr),
 	AttendanceMode: jsonld.AttendanceOffline,
 	Place:          &jsonld.Place{Name: "Kültür Merkezi", Address: &jsonld.PostalAddress{Locality: "Kadıköy", Country: "TR"}},
-	OrganizerName:  "OSE",
+	Organizer:      jsonld.Agent{Name: "OSE"},
 	Offers:         []jsonld.Offer{{Price: "0", Currency: "TRY", Availability: jsonld.InStock}},
 })
 ```
@@ -225,6 +244,26 @@ compacts it — so disabling one layer changes nothing and disabling both opens 
 hole. `TestPlugin_ClosingScriptTagInContentCannotEscape` is what notices.
 
 ## Changes
+
+### v0.6.0
+
+- Every feature in Google Search's structured data gallery has a typed node:
+  `NewsArticle`, `WebPage`, `ProfilePage`, `ItemList`, `LocalBusiness`,
+  `Product`, `SoftwareApplication`, `VacationRental`, `Review`,
+  `AggregateRating`, `EmployerAggregateRating`, `VideoObject`, `ImageObject`,
+  `Movie`, `Recipe`, `HowTo`, `Course`, `Quiz`, `MathSolver`, `Dataset`,
+  `JobPosting`, `DiscussionForumPosting` and `QAPage`.
+- `Article` (and `BlogPosting`, `NewsArticle`) takes several `Authors`, several
+  `ImageURLs`, `Speakable` selectors and `Paywalled`/`PaywallCSS`. With only the
+  old fields set, its output is unchanged.
+- `Person` takes given and family names, an alternate name, a telephone, an
+  employer and an address; `Organization` takes its legal and alternate names,
+  founding date, size, tax and registry identifiers and `ContactPoints`;
+  `Event` takes `Performers` and a `PreviousStartDate`.
+- `Offer` takes an item condition, a price validity date, a category, and, for
+  a merchant listing, its own shipping details and return policy. `Availability`
+  has every schema.org value.
+- Breaking for v0.5.0 users: `Event.OrganizerName`/`OrganizerURL` are now `Organizer` (an `Agent`), and `Event.ImageURL` is `ImageURLs`.
 
 ### v0.5.0
 

@@ -92,9 +92,39 @@ type Quiz struct {
 	Name string
 	// About is the subject: "Photosynthesis".
 	About string
-	// EducationalLevel is who it is for, as written: "Lise".
-	EducationalLevel string
-	Questions        []Flashcard
+	// EducationalAlignment places the quiz in a curriculum: its level, its
+	// subject.
+	EducationalAlignment []Alignment
+	Questions            []Flashcard
+}
+
+// Alignment is where a quiz sits in a curriculum: schema.org/AlignmentObject.
+type Alignment struct {
+	Kind AlignmentKind
+	// Target is the level or subject, as written: "Lise", "Biyoloji".
+	Target string
+}
+
+// AlignmentKind is what an Alignment places the quiz by.
+type AlignmentKind string
+
+const (
+	AlignLevel   AlignmentKind = "educationalLevel"
+	AlignSubject AlignmentKind = "educationalSubject"
+)
+
+type alignmentJSON struct {
+	SchemaType    string `json:"@type"`
+	AlignmentType string `json:"alignmentType"`
+	TargetName    string `json:"targetName"`
+}
+
+func learningAlignments(list []Alignment) []alignmentJSON {
+	var out []alignmentJSON
+	for _, a := range list {
+		out = append(out, alignmentJSON{SchemaType: "AlignmentObject", AlignmentType: string(a.Kind), TargetName: a.Target})
+	}
+	return out
 }
 
 // Flashcard is one question of a Quiz and its answer, both as plain text.
@@ -109,11 +139,11 @@ func (q Quiz) nodeKey() string { return q.Key }
 
 func (q Quiz) MarshalJSON() ([]byte, error) {
 	out := quizJSON{
-		Context:          schemaContext,
-		ID:               q.ID,
-		SchemaType:       "Quiz",
-		Name:             q.Name,
-		EducationalLevel: q.EducationalLevel,
+		Context:              schemaContext,
+		ID:                   q.ID,
+		SchemaType:           "Quiz",
+		Name:                 q.Name,
+		EducationalAlignment: learningAlignments(q.EducationalAlignment),
 	}
 	if q.About != "" {
 		out.About = &learningThing{SchemaType: "Thing", Name: q.About}
@@ -130,13 +160,13 @@ func (q Quiz) MarshalJSON() ([]byte, error) {
 }
 
 type quizJSON struct {
-	Context          string          `json:"@context"`
-	ID               string          `json:"@id,omitempty"`
-	SchemaType       string          `json:"@type"`
-	Name             string          `json:"name,omitempty"`
-	About            *learningThing  `json:"about,omitempty"`
-	EducationalLevel string          `json:"educationalLevel,omitempty"`
-	HasPart          []flashcardJSON `json:"hasPart,omitempty"`
+	Context              string          `json:"@context"`
+	ID                   string          `json:"@id,omitempty"`
+	SchemaType           string          `json:"@type"`
+	Name                 string          `json:"name,omitempty"`
+	About                *learningThing  `json:"about,omitempty"`
+	EducationalAlignment []alignmentJSON `json:"educationalAlignment,omitempty"`
+	HasPart              []flashcardJSON `json:"hasPart,omitempty"`
 }
 
 // learningThing is a schema.org/Thing by name alone.
@@ -232,9 +262,9 @@ type Dataset struct {
 	Keywords   []string
 	// License is a URL to the license the data is published under.
 	License string
-	// NotFree marks a dataset that is not free to access; left false, nothing
-	// is said either way.
-	NotFree      bool
+	// Paywalled marks a dataset that is not free to access, as on Article; left
+	// false, nothing is said either way.
+	Paywalled    bool
 	Creator      []Agent
 	Distribution []DataDownload
 	// TemporalCoverage is the period the data covers, in ISO 8601:
@@ -274,7 +304,7 @@ func (d Dataset) MarshalJSON() ([]byte, error) {
 		SpatialCoverage:  d.SpatialCoverage,
 		VariableMeasured: d.VariableMeasured,
 	}
-	if d.NotFree {
+	if d.Paywalled {
 		free := false
 		out.IsAccessibleForFree = &free
 	}

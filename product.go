@@ -84,24 +84,25 @@ func (p Product) MarshalJSON() ([]byte, error) {
 // ShippingDetails is what shipping costs and how long it takes to one country:
 // schema.org/OfferShippingDetails.
 type ShippingDetails struct {
-	// Rate is the shipping cost as a string, so that "0", free shipping, is
-	// written: "29.90".
-	Rate string
-	// Currency is an ISO 4217 code: "TRY".
-	Currency string
+	// Rate is the shipping cost; a Value of "0" is free shipping.
+	Rate *Money
 	// Country is the destination, an ISO 3166-1 alpha-2 code: "TR".
 	Country string
 	// HandlingDays and TransitDays are the least and the most business days the
-	// order is handled and in transit; both zero is left out.
-	HandlingDays [2]int
-	TransitDays  [2]int
+	// order is handled and in transit. Nil is left out; {0, 0} is the same day.
+	HandlingDays *DayRange
+	TransitDays  *DayRange
+}
+
+// DayRange is a least and a most number of days.
+type DayRange struct {
+	Min int
+	Max int
 }
 
 func (s ShippingDetails) wire() productShippingJSON {
 	out := productShippingJSON{SchemaType: "OfferShippingDetails"}
-	if s.Rate != "" {
-		out.ShippingRate = &productMoneyJSON{SchemaType: "MonetaryAmount", Value: s.Rate, Currency: s.Currency}
-	}
+	out.ShippingRate = s.Rate.wire()
 	if s.Country != "" {
 		out.ShippingDestination = &productRegionJSON{SchemaType: "DefinedRegion", AddressCountry: s.Country}
 	}
@@ -112,12 +113,12 @@ func (s ShippingDetails) wire() productShippingJSON {
 	return out
 }
 
-// productDays is a min/max range of days, nil when both are zero.
-func productDays(days [2]int) *productQuantityJSON {
-	if days == [2]int{} {
+// productDays is a min/max range of days, nil for nil.
+func productDays(days *DayRange) *productQuantityJSON {
+	if days == nil {
 		return nil
 	}
-	return &productQuantityJSON{SchemaType: "QuantitativeValue", MinValue: days[0], MaxValue: days[1], UnitCode: "DAY"}
+	return &productQuantityJSON{SchemaType: "QuantitativeValue", MinValue: days.Min, MaxValue: days.Max, UnitCode: "DAY"}
 }
 
 // ReturnPolicy is how a product can be returned: schema.org/MerchantReturnPolicy.
@@ -129,6 +130,8 @@ type ReturnPolicy struct {
 	Days   int
 	Method ReturnMethod
 	Fees   ReturnFees
+	// ShippingFee is what returning costs the customer, for ReturnShippingFees.
+	ShippingFee *Money
 }
 
 func (r *ReturnPolicy) wire() *productReturnJSON {
@@ -142,6 +145,7 @@ func (r *ReturnPolicy) wire() *productReturnJSON {
 		MerchantReturnDays:   r.Days,
 		ReturnMethod:         string(r.Method),
 		ReturnFees:           string(r.Fees),
+		ShippingFeesAmount:   r.ShippingFee.wire(),
 	}
 }
 
@@ -171,7 +175,6 @@ const (
 	FreeReturn                       ReturnFees = "https://schema.org/FreeReturn"
 	ReturnFeesCustomerResponsibility ReturnFees = "https://schema.org/ReturnFeesCustomerResponsibility"
 	ReturnShippingFees               ReturnFees = "https://schema.org/ReturnShippingFees"
-	OriginalShippingFees             ReturnFees = "https://schema.org/OriginalShippingFees"
 )
 
 // SoftwareApplication is an app, a program or a game:
@@ -185,7 +188,7 @@ type SoftwareApplication struct {
 	Name            string
 	Description     string
 	URL             string
-	ImageURL        string
+	ImageURLs       []string
 	OperatingSystem string
 	// ApplicationCategory is schema.org's category name: "GameApplication",
 	// "BusinessApplication".
@@ -228,9 +231,7 @@ func (s SoftwareApplication) MarshalJSON() ([]byte, error) {
 		AggregateRating:     aggregate(s.AggregateRating),
 		Review:              reviews(s.Reviews),
 	}
-	if s.ImageURL != "" {
-		out.Image = &imageObject{SchemaType: "ImageObject", URL: s.ImageURL}
-	}
+	out.Image = s.ImageURLs
 	return json.Marshal(out)
 }
 
@@ -241,7 +242,7 @@ type Movie struct {
 	Key             string
 	Name            string
 	URL             string
-	ImageURL        string
+	ImageURLs       []string
 	DateCreated     time.Time
 	Director        Agent
 	Actors          []Agent
@@ -268,9 +269,7 @@ func (m Movie) MarshalJSON() ([]byte, error) {
 		AggregateRating: aggregate(m.AggregateRating),
 		Review:          reviews(m.Reviews),
 	}
-	if m.ImageURL != "" {
-		out.Image = &imageObject{SchemaType: "ImageObject", URL: m.ImageURL}
-	}
+	out.Image = m.ImageURLs
 	return json.Marshal(out)
 }
 
@@ -281,14 +280,12 @@ type EmployerAggregateRating struct {
 	ID  string
 	Key string
 	// Employer is the organization rated; an empty Kind is AgentOrganization.
-	Employer Agent
-	// EmployerSameAs are the employer's profiles elsewhere.
-	EmployerSameAs []string
-	Value          float64
-	RatingCount    int
-	ReviewCount    int
-	BestRating     float64
-	WorstRating    float64
+	Employer    Agent
+	Value       float64
+	RatingCount int
+	ReviewCount int
+	BestRating  float64
+	WorstRating float64
 }
 
 func (EmployerAggregateRating) Type() string { return "EmployerAggregateRating" }
@@ -306,18 +303,7 @@ func (e EmployerAggregateRating) MarshalJSON() ([]byte, error) {
 		BestRating:  e.BestRating,
 		WorstRating: e.WorstRating,
 	}
-	if e.Employer.Name != "" {
-		kind := e.Employer.Kind
-		if kind == "" {
-			kind = AgentOrganization
-		}
-		out.ItemReviewed = &productEmployerJSON{
-			SchemaType: string(kind),
-			Name:       e.Employer.Name,
-			URL:        e.Employer.URL,
-			SameAs:     e.EmployerSameAs,
-		}
-	}
+	out.ItemReviewed = organizationAgent(e.Employer)
 	return json.Marshal(out)
 }
 
@@ -354,15 +340,9 @@ type productBrandJSON struct {
 
 type productShippingJSON struct {
 	SchemaType          string               `json:"@type"`
-	ShippingRate        *productMoneyJSON    `json:"shippingRate,omitempty"`
+	ShippingRate        *moneyJSON           `json:"shippingRate,omitempty"`
 	ShippingDestination *productRegionJSON   `json:"shippingDestination,omitempty"`
 	DeliveryTime        *productDeliveryJSON `json:"deliveryTime,omitempty"`
-}
-
-type productMoneyJSON struct {
-	SchemaType string `json:"@type"`
-	Value      string `json:"value"`
-	Currency   string `json:"currency,omitempty"`
 }
 
 type productRegionJSON struct {
@@ -390,6 +370,8 @@ type productReturnJSON struct {
 	MerchantReturnDays   int    `json:"merchantReturnDays,omitempty"`
 	ReturnMethod         string `json:"returnMethod,omitempty"`
 	ReturnFees           string `json:"returnFees,omitempty"`
+
+	ShippingFeesAmount *moneyJSON `json:"returnShippingFeesAmount,omitempty"`
 }
 
 type productSoftwareJSON struct {
@@ -399,7 +381,7 @@ type productSoftwareJSON struct {
 	Name                string               `json:"name"`
 	Description         string               `json:"description,omitempty"`
 	URL                 string               `json:"url,omitempty"`
-	Image               *imageObject         `json:"image,omitempty"`
+	Image               []string             `json:"image,omitempty"`
 	OperatingSystem     string               `json:"operatingSystem,omitempty"`
 	ApplicationCategory string               `json:"applicationCategory,omitempty"`
 	Offers              []offerJSON          `json:"offers,omitempty"`
@@ -413,7 +395,7 @@ type productMovieJSON struct {
 	SchemaType      string               `json:"@type"`
 	Name            string               `json:"name"`
 	URL             string               `json:"url,omitempty"`
-	Image           *imageObject         `json:"image,omitempty"`
+	Image           []string             `json:"image,omitempty"`
 	DateCreated     string               `json:"dateCreated,omitempty"`
 	Director        *agentJSON           `json:"director,omitempty"`
 	Actor           []agentJSON          `json:"actor,omitempty"`
@@ -423,20 +405,13 @@ type productMovieJSON struct {
 }
 
 type productEmployerRatingJSON struct {
-	Context      string               `json:"@context"`
-	ID           string               `json:"@id,omitempty"`
-	SchemaType   string               `json:"@type"`
-	ItemReviewed *productEmployerJSON `json:"itemReviewed,omitempty"`
-	RatingValue  float64              `json:"ratingValue"`
-	RatingCount  int                  `json:"ratingCount,omitempty"`
-	ReviewCount  int                  `json:"reviewCount,omitempty"`
-	BestRating   float64              `json:"bestRating,omitempty"`
-	WorstRating  float64              `json:"worstRating,omitempty"`
-}
-
-type productEmployerJSON struct {
-	SchemaType string   `json:"@type"`
-	Name       string   `json:"name"`
-	URL        string   `json:"url,omitempty"`
-	SameAs     []string `json:"sameAs,omitempty"`
+	Context      string     `json:"@context"`
+	ID           string     `json:"@id,omitempty"`
+	SchemaType   string     `json:"@type"`
+	ItemReviewed *agentJSON `json:"itemReviewed,omitempty"`
+	RatingValue  float64    `json:"ratingValue"`
+	RatingCount  int        `json:"ratingCount,omitempty"`
+	ReviewCount  int        `json:"reviewCount,omitempty"`
+	BestRating   float64    `json:"bestRating,omitempty"`
+	WorstRating  float64    `json:"worstRating,omitempty"`
 }

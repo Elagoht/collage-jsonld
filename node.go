@@ -140,8 +140,8 @@ type Article struct {
 	// aloud.
 	Speakable []string
 	// Paywalled marks the article as not free to read; PaywallCSS are the CSS
-	// selectors of the parts behind the paywall. Search engines tell paywalled
-	// content from cloaking by these.
+	// selectors of the parts behind the paywall, and setting any implies
+	// Paywalled. Search engines tell paywalled content from cloaking by these.
 	Paywalled  bool
 	PaywallCSS []string
 }
@@ -173,7 +173,7 @@ func (a Article) wire(schemaType string) articleJSON {
 		Speakable:   nodeSpeakable(a.Speakable),
 		HasPart:     nodePaywallParts(a.PaywallCSS),
 	}
-	if a.Paywalled {
+	if a.Paywalled || len(a.PaywallCSS) > 0 {
 		free := false
 		out.IsAccessibleForFree = &free
 	}
@@ -210,7 +210,7 @@ func nodeAuthors(name, url string, more []Agent) *nodeAuthorField {
 	if len(list) == 0 {
 		return nil
 	}
-	return &nodeAuthorField{single: len(more) == 0, list: list}
+	return &nodeAuthorField{single: len(list) == 1 && name != "", list: list}
 }
 
 // nodeImageField is an article's "image": the ImageObject it always was with

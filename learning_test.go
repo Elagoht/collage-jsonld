@@ -66,14 +66,14 @@ func TestQuiz_Marshal(t *testing.T) {
 		{
 			name: "everything",
 			quiz: jsonld.Quiz{
-				ID:               "https://ose.example/q#quiz",
-				Name:             "Oyun tarihi",
-				About:            "Video oyunları",
-				EducationalLevel: "Lise",
-				Questions:        []jsonld.Flashcard{{Question: "Pong hangi yıl çıktı?", Answer: "1972"}},
+				ID:                   "https://ose.example/q#quiz",
+				Name:                 "Oyun tarihi",
+				About:                "Video oyunları",
+				EducationalAlignment: []jsonld.Alignment{{Kind: jsonld.AlignLevel, Target: "Lise"}},
+				Questions:            []jsonld.Flashcard{{Question: "Pong hangi yıl çıktı?", Answer: "1972"}},
 			},
 			want: `{"@context":"https://schema.org","@id":"https://ose.example/q#quiz","@type":"Quiz",` +
-				`"name":"Oyun tarihi","about":{"@type":"Thing","name":"Video oyunları"},"educationalLevel":"Lise",` +
+				`"name":"Oyun tarihi","about":{"@type":"Thing","name":"Video oyunları"},"educationalAlignment":[{"@type":"AlignmentObject","alignmentType":"educationalLevel","targetName":"Lise"}],` +
 				`"hasPart":[{"@type":"Question","eduQuestionType":"Flashcard","text":"Pong hangi yıl çıktı?",` +
 				`"acceptedAnswer":{"@type":"Answer","text":"1972"}}]}`,
 		},
@@ -147,7 +147,7 @@ func TestDataset_Marshal(t *testing.T) {
 				Identifier:       []string{"https://doi.org/10.0000/ose"},
 				Keywords:         []string{"oyun", "etkinlik"},
 				License:          "https://creativecommons.org/licenses/by/4.0/",
-				NotFree:          true,
+				Paywalled:        true,
 				Creator:          []jsonld.Agent{{Kind: jsonld.AgentOrganization, Name: "OSE"}, {Name: ""}},
 				Distribution:     []jsonld.DataDownload{{EncodingFormat: "text/csv", ContentURL: "https://ose.example/d/etkinlik.csv"}},
 				TemporalCoverage: "2020-01-01/2026-12-31",

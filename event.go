@@ -19,9 +19,11 @@ type Event struct {
 	Name        string
 	Description string
 	URL         string
-	ImageURL    string
-	StartDate   time.Time
-	EndDate     time.Time
+	// ImageURLs are the event's images; search engines prefer several, in
+	// different aspect ratios.
+	ImageURLs []string
+	StartDate time.Time
+	EndDate   time.Time
 	// Status is left out when empty, which consumers read as EventScheduled.
 	Status EventStatus
 	// AttendanceMode is left out when empty. A mixed event wants both a Place and
@@ -31,10 +33,10 @@ type Event struct {
 	Place *Place
 	// OnlineURL is where the event happens online, written as a VirtualLocation.
 	// With a Place as well, the location is both.
-	OnlineURL     string
-	OrganizerName string
-	OrganizerURL  string
-	Offers        []Offer
+	OnlineURL string
+	// Organizer is who runs the event; an empty Kind is AgentOrganization.
+	Organizer Agent
+	Offers    []Offer
 	// Performers are who performs at the event: people, organizations or
 	// performing groups.
 	Performers []Agent
@@ -56,7 +58,8 @@ func (e Event) MarshalJSON() ([]byte, error) {
 		URL:                 e.URL,
 		EventStatus:         string(e.Status),
 		EventAttendanceMode: string(e.AttendanceMode),
-		Organizer:           organizerNode(e.OrganizerName, e.OrganizerURL),
+		Organizer:           organizationAgent(e.Organizer),
+		Image:               e.ImageURLs,
 		Performer:           agents(e.Performers),
 		PreviousStartDate:   dateTime(e.PreviousStartDate),
 	}
@@ -66,14 +69,11 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	if !e.EndDate.IsZero() {
 		out.EndDate = e.EndDate.Format(time.RFC3339)
 	}
-	if e.ImageURL != "" {
-		out.Image = &imageObject{SchemaType: "ImageObject", URL: e.ImageURL}
-	}
 
 	// One location is an object and two are an array: schema.org takes either,
 	// and a single place written as a one-element array reads oddly in a page.
 	var locations []json.RawMessage
-	if e.Place != nil {
+	if e.Place != nil && (e.Place.Name != "" || e.Place.Address != nil) {
 		place, err := json.Marshal(e.Place.wire())
 		if err != nil {
 			return nil, err
@@ -126,7 +126,7 @@ const (
 )
 
 // Place is a physical location: schema.org/Place. It is part of an Event, not a
-// node of its own.
+// node of its own. One with neither a name nor an address is left out.
 type Place struct {
 	Name    string
 	Address *PostalAddress
@@ -164,15 +164,6 @@ func (a *PostalAddress) wire() *postalAddressJSON {
 	}
 }
 
-// organizerNode is an event's organizer, flattened into name fields as Article's
-// author is, and nil when the name is empty.
-func organizerNode(name, url string) *organization {
-	if name == "" {
-		return nil
-	}
-	return &organization{SchemaType: "Organization", Name: name, URL: url}
-}
-
 type eventJSON struct {
 	Context             string          `json:"@context"`
 	ID                  string          `json:"@id,omitempty"`
@@ -180,13 +171,13 @@ type eventJSON struct {
 	Name                string          `json:"name"`
 	Description         string          `json:"description,omitempty"`
 	URL                 string          `json:"url,omitempty"`
-	Image               *imageObject    `json:"image,omitempty"`
+	Image               []string        `json:"image,omitempty"`
 	StartDate           string          `json:"startDate,omitempty"`
 	EndDate             string          `json:"endDate,omitempty"`
 	EventStatus         string          `json:"eventStatus,omitempty"`
 	EventAttendanceMode string          `json:"eventAttendanceMode,omitempty"`
 	Location            json.RawMessage `json:"location,omitempty"`
-	Organizer           *organization   `json:"organizer,omitempty"`
+	Organizer           *agentJSON      `json:"organizer,omitempty"`
 	Offers              []offerJSON     `json:"offers,omitempty"`
 	Performer           []agentJSON     `json:"performer,omitempty"`
 	PreviousStartDate   string          `json:"previousStartDate,omitempty"`

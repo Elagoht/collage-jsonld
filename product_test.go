@@ -40,11 +40,10 @@ func TestProduct_Marshal(t *testing.T) {
 					PriceValidUntil: time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC),
 				}},
 				ShippingDetails: []jsonld.ShippingDetails{{
-					Rate:         "0",
-					Currency:     "TRY",
+					Rate:         &jsonld.Money{Value: "0", Currency: "TRY"},
 					Country:      "TR",
-					HandlingDays: [2]int{0, 1},
-					TransitDays:  [2]int{1, 3},
+					HandlingDays: &jsonld.DayRange{Min: 0, Max: 1},
+					TransitDays:  &jsonld.DayRange{Min: 1, Max: 3},
 				}},
 				ReturnPolicy: &jsonld.ReturnPolicy{
 					Country:  "TR",
@@ -88,7 +87,7 @@ func TestProduct_Marshal(t *testing.T) {
 		},
 		{
 			name: "shipping without offers has nowhere to go",
-			product: jsonld.Product{Name: "Fare", ShippingDetails: []jsonld.ShippingDetails{{Rate: "0", Country: "TR"}},
+			product: jsonld.Product{Name: "Fare", ShippingDetails: []jsonld.ShippingDetails{{Rate: &jsonld.Money{Value: "0"}, Country: "TR"}},
 				ReturnPolicy: &jsonld.ReturnPolicy{Category: jsonld.ReturnNotPermitted}},
 			want: `{"@context":"https://schema.org","@type":"Product","name":"Fare"}`,
 		},
@@ -116,7 +115,7 @@ func TestSoftwareApplication_Marshal(t *testing.T) {
 				Name:                "Kale",
 				Description:         "Bir strateji oyunu.",
 				URL:                 "https://game.example",
-				ImageURL:            "https://game.example/cover.png",
+				ImageURLs:           []string{"https://game.example/cover.png"},
 				OperatingSystem:     "Windows, macOS",
 				ApplicationCategory: "GameApplication",
 				Offers:              []jsonld.Offer{{Price: "149.90", Currency: "TRY"}},
@@ -124,7 +123,7 @@ func TestSoftwareApplication_Marshal(t *testing.T) {
 			},
 			want: `{"@context":"https://schema.org","@id":"https://game.example/#game","@type":"VideoGame",` +
 				`"name":"Kale","description":"Bir strateji oyunu.","url":"https://game.example",` +
-				`"image":{"@type":"ImageObject","url":"https://game.example/cover.png"},` +
+				`"image":["https://game.example/cover.png"],` +
 				`"operatingSystem":"Windows, macOS","applicationCategory":"GameApplication",` +
 				`"offers":[{"@type":"Offer","price":"149.90","priceCurrency":"TRY"}],` +
 				`"aggregateRating":{"@type":"AggregateRating","ratingValue":4.8,"ratingCount":1200}}`,
@@ -159,7 +158,7 @@ func TestMovie_Marshal(t *testing.T) {
 				ID:          "https://film.example/m/kis#movie",
 				Name:        "Kış Uykusu",
 				URL:         "https://film.example/m/kis",
-				ImageURL:    "https://film.example/kis.jpg",
+				ImageURLs:   []string{"https://film.example/kis.jpg"},
 				DateCreated: time.Date(2014, 5, 16, 0, 0, 0, 0, time.UTC),
 				Director:    jsonld.Agent{Name: "Nuri Bilge Ceylan"},
 				Actors:      []jsonld.Agent{{Name: "Haluk Bilginer"}, {Name: ""}, {Name: "Melisa Sözen"}},
@@ -168,7 +167,7 @@ func TestMovie_Marshal(t *testing.T) {
 			},
 			want: `{"@context":"https://schema.org","@id":"https://film.example/m/kis#movie","@type":"Movie",` +
 				`"name":"Kış Uykusu","url":"https://film.example/m/kis",` +
-				`"image":{"@type":"ImageObject","url":"https://film.example/kis.jpg"},"dateCreated":"2014-05-16",` +
+				`"image":["https://film.example/kis.jpg"],"dateCreated":"2014-05-16",` +
 				`"director":{"@type":"Person","name":"Nuri Bilge Ceylan"},` +
 				`"actor":[{"@type":"Person","name":"Haluk Bilginer"},{"@type":"Person","name":"Melisa Sözen"}],` +
 				`"duration":"PT3H16M",` +
@@ -199,14 +198,13 @@ func TestEmployerAggregateRating_Marshal(t *testing.T) {
 		{
 			name: "everything",
 			rating: jsonld.EmployerAggregateRating{
-				ID:             "https://jobs.example/acme#rating",
-				Employer:       jsonld.Agent{Name: "Acme", URL: "https://acme.example"},
-				EmployerSameAs: []string{"https://linkedin.com/company/acme"},
-				Value:          3.8,
-				RatingCount:    120,
-				ReviewCount:    40,
-				BestRating:     5,
-				WorstRating:    1,
+				ID:          "https://jobs.example/acme#rating",
+				Employer:    jsonld.Agent{Name: "Acme", URL: "https://acme.example", SameAs: []string{"https://linkedin.com/company/acme"}},
+				Value:       3.8,
+				RatingCount: 120,
+				ReviewCount: 40,
+				BestRating:  5,
+				WorstRating: 1,
 			},
 			want: `{"@context":"https://schema.org","@id":"https://jobs.example/acme#rating","@type":"EmployerAggregateRating",` +
 				`"itemReviewed":{"@type":"Organization","name":"Acme","url":"https://acme.example",` +
@@ -289,7 +287,7 @@ func TestPlugin_ClosingScriptTagInAProductCannotEscape(t *testing.T) {
 	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
 		jsonld.Emit(rc,
 			jsonld.Product{Name: payload, Brand: payload, Offers: []jsonld.Offer{{Price: "1"}},
-				ShippingDetails: []jsonld.ShippingDetails{{Rate: payload}}},
+				ShippingDetails: []jsonld.ShippingDetails{{Rate: &jsonld.Money{Value: payload}}}},
 			jsonld.SoftwareApplication{Name: payload},
 			jsonld.Movie{Name: payload, Director: jsonld.Agent{Name: payload}},
 			jsonld.EmployerAggregateRating{Employer: jsonld.Agent{Name: payload}},
@@ -313,10 +311,10 @@ func TestProduct_AnOffersOwnPolicyWinsOverTheProducts(t *testing.T) {
 		Name: "Gamepad",
 		Offers: []jsonld.Offer{
 			{Price: "100", Currency: "TRY", ReturnPolicy: &jsonld.ReturnPolicy{Country: "TR", Category: jsonld.ReturnNotPermitted},
-				ShippingDetails: []jsonld.ShippingDetails{{Rate: "0", Currency: "TRY", Country: "TR"}}},
+				ShippingDetails: []jsonld.ShippingDetails{{Rate: &jsonld.Money{Value: "0", Currency: "TRY"}, Country: "TR"}}},
 			{Price: "90", Currency: "TRY"},
 		},
-		ShippingDetails: []jsonld.ShippingDetails{{Rate: "50", Currency: "TRY", Country: "TR"}},
+		ShippingDetails: []jsonld.ShippingDetails{{Rate: &jsonld.Money{Value: "50", Currency: "TRY"}, Country: "TR"}},
 		ReturnPolicy:    &jsonld.ReturnPolicy{Country: "TR", Category: jsonld.ReturnFiniteWindow, Days: 14},
 	}
 	want := `{"@context":"https://schema.org","@type":"Product","name":"Gamepad","offers":[` +

@@ -21,7 +21,7 @@ func TestListings_Marshal(t *testing.T) {
 		{
 			name: "local business, everything",
 			node: jsonld.LocalBusiness{
-				BusinessType:  "Restaurant",
+				Kind:          "Restaurant",
 				ID:            "https://kahve.example/#place",
 				Name:          "Kahve Durağı",
 				Description:   "Üçüncü dalga kahve.",
@@ -50,15 +50,14 @@ func TestListings_Marshal(t *testing.T) {
 		{
 			name: "job posting, everything",
 			node: jsonld.JobPosting{
-				ID:                       "https://ose.example/jobs/1#job",
-				Title:                    "Oyun Programcısı",
-				Description:              "<p>Unity ile <b>oyun</b> geliştir.</p>",
-				DatePosted:               time.Date(2026, 10, 1, 0, 0, 0, 0, listingIstanbul),
-				ValidThrough:             time.Date(2026, 11, 1, 0, 0, 0, 0, listingIstanbul),
-				EmploymentType:           []jsonld.EmploymentType{jsonld.EmploymentFullTime, jsonld.EmploymentContractor},
-				HiringOrganization:       jsonld.Agent{Name: "OSE", URL: "https://ose.example"},
-				HiringOrganizationLogo:   "https://ose.example/logo.png",
-				HiringOrganizationSameAs: "https://linkedin.com/company/ose",
+				ID:             "https://ose.example/jobs/1#job",
+				Title:          "Oyun Programcısı",
+				Description:    "<p>Unity ile <b>oyun</b> geliştir.</p>",
+				DatePosted:     time.Date(2026, 10, 1, 0, 0, 0, 0, listingIstanbul),
+				ValidThrough:   time.Date(2026, 11, 1, 0, 0, 0, 0, listingIstanbul),
+				EmploymentType: []jsonld.EmploymentType{jsonld.EmploymentFullTime, jsonld.EmploymentContractor},
+				HiringOrganization: jsonld.Agent{Name: "OSE", URL: "https://ose.example",
+					LogoURL: "https://ose.example/logo.png", SameAs: []string{"https://linkedin.com/company/ose"}},
 				Locations: []jsonld.PostalAddress{
 					{Locality: "Kadıköy", Country: "TR"},
 					{Locality: "Çankaya", Country: "TR"},
@@ -71,7 +70,7 @@ func TestListings_Marshal(t *testing.T) {
 				EducationRequirements: "bachelor degree",
 				ExperienceMonths:      24,
 			},
-			want: "{\"@context\":\"https://schema.org\",\"@id\":\"https://ose.example/jobs/1#job\",\"@type\":\"JobPosting\",\"title\":\"Oyun Programcısı\",\"description\":\"\\u003cp\\u003eUnity ile \\u003cb\\u003eoyun\\u003c/b\\u003e geliştir.\\u003c/p\\u003e\",\"identifier\":{\"@type\":\"PropertyValue\",\"name\":\"OSE\",\"value\":\"J-1\"},\"datePosted\":\"2026-10-01\",\"validThrough\":\"2026-11-01T00:00:00+03:00\",\"employmentType\":[\"FULL_TIME\",\"CONTRACTOR\"],\"hiringOrganization\":{\"@type\":\"Organization\",\"name\":\"OSE\",\"sameAs\":\"https://linkedin.com/company/ose\",\"url\":\"https://ose.example\",\"logo\":\"https://ose.example/logo.png\"},\"jobLocation\":[{\"@type\":\"Place\",\"address\":{\"@type\":\"PostalAddress\",\"addressLocality\":\"Kadıköy\",\"addressCountry\":\"TR\"}},{\"@type\":\"Place\",\"address\":{\"@type\":\"PostalAddress\",\"addressLocality\":\"Çankaya\",\"addressCountry\":\"TR\"}}],\"jobLocationType\":\"TELECOMMUTE\",\"applicantLocationRequirements\":[{\"@type\":\"Country\",\"name\":\"TR\"}],\"baseSalary\":{\"@type\":\"MonetaryAmount\",\"currency\":\"TRY\",\"value\":{\"@type\":\"QuantitativeValue\",\"minValue\":80000,\"maxValue\":120000,\"unitText\":\"MONTH\"}},\"directApply\":true,\"educationRequirements\":\"bachelor degree\",\"experienceRequirements\":{\"@type\":\"OccupationalExperienceRequirements\",\"monthsOfExperience\":24}}",
+			want: "{\"@context\":\"https://schema.org\",\"@id\":\"https://ose.example/jobs/1#job\",\"@type\":\"JobPosting\",\"title\":\"Oyun Programcısı\",\"description\":\"\\u003cp\\u003eUnity ile \\u003cb\\u003eoyun\\u003c/b\\u003e geliştir.\\u003c/p\\u003e\",\"identifier\":{\"@type\":\"PropertyValue\",\"name\":\"OSE\",\"value\":\"J-1\"},\"datePosted\":\"2026-10-01\",\"validThrough\":\"2026-11-01T00:00:00+03:00\",\"employmentType\":[\"FULL_TIME\",\"CONTRACTOR\"],\"hiringOrganization\":{\"@type\":\"Organization\",\"name\":\"OSE\",\"url\":\"https://ose.example\",\"sameAs\":[\"https://linkedin.com/company/ose\"],\"logo\":{\"@type\":\"ImageObject\",\"url\":\"https://ose.example/logo.png\"}},\"jobLocation\":[{\"@type\":\"Place\",\"address\":{\"@type\":\"PostalAddress\",\"addressLocality\":\"Kadıköy\",\"addressCountry\":\"TR\"}},{\"@type\":\"Place\",\"address\":{\"@type\":\"PostalAddress\",\"addressLocality\":\"Çankaya\",\"addressCountry\":\"TR\"}}],\"jobLocationType\":\"TELECOMMUTE\",\"applicantLocationRequirements\":[{\"@type\":\"Country\",\"name\":\"TR\"}],\"baseSalary\":{\"@type\":\"MonetaryAmount\",\"currency\":\"TRY\",\"value\":{\"@type\":\"QuantitativeValue\",\"minValue\":80000,\"maxValue\":120000,\"unitText\":\"MONTH\"}},\"directApply\":true,\"educationRequirements\":\"bachelor degree\",\"experienceRequirements\":{\"@type\":\"OccupationalExperienceRequirements\",\"monthsOfExperience\":24}}",
 		},
 		{
 			name: "forum posting, everything",
@@ -102,35 +101,36 @@ func TestListings_Marshal(t *testing.T) {
 				ID: "https://qa.example/q/1#page",
 				Question: jsonld.QAQuestion{
 					Name: "Unity mi Godot mu?", Text: "Yeni başlıyorum.", AnswerCount: 2, UpvoteCount: 4,
-					DateCreated: time.Date(2026, 10, 1, 9, 0, 0, 0, listingIstanbul), Author: jsonld.Agent{Name: "Ada"},
+					DatePublished: time.Date(2026, 10, 1, 9, 0, 0, 0, listingIstanbul), Author: jsonld.Agent{Name: "Ada"},
 					Accepted:  []jsonld.QAAnswer{{Text: "Godot.", URL: "https://qa.example/q/1#a1", UpvoteCount: 9, Author: jsonld.Agent{Name: "Kemal"}}},
-					Suggested: []jsonld.QAAnswer{{Text: "Unity.", DateCreated: time.Date(2026, 10, 1, 10, 0, 0, 0, listingIstanbul)}},
+					Suggested: []jsonld.QAAnswer{{Text: "Unity.", DatePublished: time.Date(2026, 10, 1, 10, 0, 0, 0, listingIstanbul)}},
 				},
 			},
-			want: "{\"@context\":\"https://schema.org\",\"@id\":\"https://qa.example/q/1#page\",\"@type\":\"QAPage\",\"mainEntity\":{\"@type\":\"Question\",\"name\":\"Unity mi Godot mu?\",\"text\":\"Yeni başlıyorum.\",\"answerCount\":2,\"upvoteCount\":4,\"dateCreated\":\"2026-10-01T09:00:00+03:00\",\"author\":{\"@type\":\"Person\",\"name\":\"Ada\"},\"acceptedAnswer\":[{\"@type\":\"Answer\",\"text\":\"Godot.\",\"url\":\"https://qa.example/q/1#a1\",\"upvoteCount\":9,\"author\":{\"@type\":\"Person\",\"name\":\"Kemal\"}}],\"suggestedAnswer\":[{\"@type\":\"Answer\",\"text\":\"Unity.\",\"dateCreated\":\"2026-10-01T10:00:00+03:00\"}]}}",
+			want: "{\"@context\":\"https://schema.org\",\"@id\":\"https://qa.example/q/1#page\",\"@type\":\"QAPage\",\"mainEntity\":{\"@type\":\"Question\",\"name\":\"Unity mi Godot mu?\",\"text\":\"Yeni başlıyorum.\",\"answerCount\":2,\"upvoteCount\":4,\"datePublished\":\"2026-10-01T09:00:00+03:00\",\"author\":{\"@type\":\"Person\",\"name\":\"Ada\"},\"acceptedAnswer\":[{\"@type\":\"Answer\",\"text\":\"Godot.\",\"url\":\"https://qa.example/q/1#a1\",\"upvoteCount\":9,\"author\":{\"@type\":\"Person\",\"name\":\"Kemal\"}}],\"suggestedAnswer\":[{\"@type\":\"Answer\",\"text\":\"Unity.\",\"datePublished\":\"2026-10-01T10:00:00+03:00\"}]}}",
 		},
 		{
 			name: "vacation rental, everything",
 			node: jsonld.VacationRental{
-				ID:            "https://ev.example/1#rental",
-				Identifier:    "ev-1",
-				Name:          "Deniz Evi",
-				Description:   "Denize sıfır.",
-				ImageURLs:     []string{"https://ev.example/1.jpg", "https://ev.example/2.jpg"},
-				Address:       &jsonld.PostalAddress{Locality: "Bodrum", Region: "Muğla", Country: "TR"},
-				Geo:           jsonld.GeoCoordinates{Latitude: 37.03, Longitude: 27.43},
-				Brand:         "Ev Kiralama",
-				CheckinTime:   "15:00",
-				CheckoutTime:  "11:00",
-				KnowsLanguage: []string{"tr", "en"},
+				ID:             "https://ev.example/1#rental",
+				Identifier:     "ev-1",
+				Name:           "Deniz Evi",
+				Description:    "Denize sıfır.",
+				ImageURLs:      []string{"https://ev.example/1.jpg", "https://ev.example/2.jpg"},
+				Address:        &jsonld.PostalAddress{Locality: "Bodrum", Region: "Muğla", Country: "TR"},
+				Geo:            jsonld.GeoCoordinates{Latitude: 37.03, Longitude: 27.43},
+				Brand:          "Ev Kiralama",
+				CheckinTime:    "15:00:00+03:00",
+				CheckoutTime:   "11:00:00+03:00",
+				AdditionalType: "House",
+				KnowsLanguage:  []string{"tr", "en"},
 				Accommodation: jsonld.Accommodation{
-					Kind: "House", Occupancy: 6, Bedrooms: 3, Bathrooms: 2, FloorSizeM2: 120,
+					AdditionalType: "EntirePlace", Occupancy: 6, Rooms: 5, Bedrooms: 3, Bathrooms: 2.5, FloorSizeM2: 120,
 					Beds:      []jsonld.Bed{{Type: "Double", Count: 2}, {Type: "Single", Count: 2}},
-					Amenities: []string{"wifi", "pool"},
+					Amenities: []jsonld.Amenity{{Name: "wifi"}, {Name: "poolType", Value: "Outdoor"}},
 				},
 				AggregateRating: &jsonld.AggregateRating{Value: 4.9, ReviewCount: 30},
 			},
-			want: "{\"@context\":\"https://schema.org\",\"@id\":\"https://ev.example/1#rental\",\"@type\":\"VacationRental\",\"identifier\":\"ev-1\",\"name\":\"Deniz Evi\",\"description\":\"Denize sıfır.\",\"image\":[\"https://ev.example/1.jpg\",\"https://ev.example/2.jpg\"],\"address\":{\"@type\":\"PostalAddress\",\"addressLocality\":\"Bodrum\",\"addressRegion\":\"Muğla\",\"addressCountry\":\"TR\"},\"latitude\":37.03,\"longitude\":27.43,\"brand\":{\"@type\":\"Brand\",\"name\":\"Ev Kiralama\"},\"checkinTime\":\"15:00\",\"checkoutTime\":\"11:00\",\"knowsLanguage\":[\"tr\",\"en\"],\"containsPlace\":{\"@type\":\"House\",\"occupancy\":{\"@type\":\"QuantitativeValue\",\"value\":6},\"numberOfBedrooms\":3,\"numberOfBathroomsTotal\":2,\"floorSize\":{\"@type\":\"QuantitativeValue\",\"value\":120,\"unitCode\":\"MTK\"},\"bed\":[{\"@type\":\"BedDetails\",\"numberOfBeds\":2,\"typeOfBed\":\"Double\"},{\"@type\":\"BedDetails\",\"numberOfBeds\":2,\"typeOfBed\":\"Single\"}],\"amenityFeature\":[{\"@type\":\"LocationFeatureSpecification\",\"name\":\"wifi\",\"value\":true},{\"@type\":\"LocationFeatureSpecification\",\"name\":\"pool\",\"value\":true}]},\"aggregateRating\":{\"@type\":\"AggregateRating\",\"ratingValue\":4.9,\"reviewCount\":30}}",
+			want: "{\"@context\":\"https://schema.org\",\"@id\":\"https://ev.example/1#rental\",\"@type\":\"VacationRental\",\"additionalType\":\"House\",\"identifier\":\"ev-1\",\"name\":\"Deniz Evi\",\"description\":\"Denize sıfır.\",\"image\":[\"https://ev.example/1.jpg\",\"https://ev.example/2.jpg\"],\"address\":{\"@type\":\"PostalAddress\",\"addressLocality\":\"Bodrum\",\"addressRegion\":\"Muğla\",\"addressCountry\":\"TR\"},\"latitude\":37.03,\"longitude\":27.43,\"brand\":{\"@type\":\"Brand\",\"name\":\"Ev Kiralama\"},\"checkinTime\":\"15:00:00+03:00\",\"checkoutTime\":\"11:00:00+03:00\",\"knowsLanguage\":[\"tr\",\"en\"],\"containsPlace\":{\"@type\":\"Accommodation\",\"additionalType\":\"EntirePlace\",\"occupancy\":{\"@type\":\"QuantitativeValue\",\"value\":6},\"numberOfRooms\":5,\"numberOfBedrooms\":3,\"numberOfBathroomsTotal\":2.5,\"floorSize\":{\"@type\":\"QuantitativeValue\",\"value\":120,\"unitCode\":\"MTK\"},\"bed\":[{\"@type\":\"BedDetails\",\"numberOfBeds\":2,\"typeOfBed\":\"Double\"},{\"@type\":\"BedDetails\",\"numberOfBeds\":2,\"typeOfBed\":\"Single\"}],\"amenityFeature\":[{\"@type\":\"LocationFeatureSpecification\",\"name\":\"wifi\",\"value\":true},{\"@type\":\"LocationFeatureSpecification\",\"name\":\"poolType\",\"value\":\"Outdoor\"}]},\"aggregateRating\":{\"@type\":\"AggregateRating\",\"ratingValue\":4.9,\"reviewCount\":30}}",
 		},
 		{
 			name: "local business, a name alone",
@@ -150,7 +150,7 @@ func TestListings_Marshal(t *testing.T) {
 		{
 			name: "qa page, a question alone",
 			node: jsonld.QAPage{Question: jsonld.QAQuestion{Name: "Neden?"}},
-			want: "{\"@context\":\"https://schema.org\",\"@type\":\"QAPage\",\"mainEntity\":{\"@type\":\"Question\",\"name\":\"Neden?\"}}",
+			want: "{\"@context\":\"https://schema.org\",\"@type\":\"QAPage\",\"mainEntity\":{\"@type\":\"Question\",\"name\":\"Neden?\",\"answerCount\":0}}",
 		},
 		{
 			name: "vacation rental, a name alone",
@@ -179,9 +179,9 @@ func TestJobPosting_OneLocationIsAnObject(t *testing.T) {
 
 func TestLocalBusiness_TypeIsItsBusinessType(t *testing.T) {
 	if got := (jsonld.LocalBusiness{}).Type(); got != "LocalBusiness" {
-		t.Errorf("empty BusinessType: Type() = %q, want LocalBusiness", got)
+		t.Errorf("empty Kind: Type() = %q, want LocalBusiness", got)
 	}
-	if got := (jsonld.LocalBusiness{BusinessType: "Dentist"}).Type(); got != "Dentist" {
+	if got := (jsonld.LocalBusiness{Kind: "Dentist"}).Type(); got != "Dentist" {
 		t.Errorf("Type() = %q, want Dentist", got)
 	}
 }
@@ -222,7 +222,7 @@ func TestPlugin_ClosingScriptTagInAListingCannotEscape(t *testing.T) {
 			jsonld.JobPosting{Title: "x", Description: payload},
 			jsonld.DiscussionForumPosting{Text: payload, Comments: []jsonld.Comment{{Text: payload}}},
 			jsonld.QAPage{Question: jsonld.QAQuestion{Name: payload, Accepted: []jsonld.QAAnswer{{Text: payload}}}},
-			jsonld.VacationRental{Name: payload, Accommodation: jsonld.Accommodation{Amenities: []string{payload}}},
+			jsonld.VacationRental{Name: payload, Accommodation: jsonld.Accommodation{Amenities: []jsonld.Amenity{{Name: payload, Value: payload}}}},
 		)
 	})
 

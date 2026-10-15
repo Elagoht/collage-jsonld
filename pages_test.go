@@ -21,7 +21,7 @@ func TestWebPage_Marshal(t *testing.T) {
 			name: "everything",
 			page: jsonld.WebPage{
 				ID:            "https://x.example/about#page",
-				PageType:      jsonld.PageAbout,
+				Kind:          jsonld.PageAbout,
 				Name:          "Hakkımızda",
 				Description:   "Biz kimiz.",
 				URL:           "https://x.example/about",
@@ -56,7 +56,7 @@ func TestWebPage_Marshal(t *testing.T) {
 			}
 		})
 	}
-	if got := (jsonld.WebPage{PageType: jsonld.PageContact}).Type(); got != "ContactPage" {
+	if got := (jsonld.WebPage{Kind: jsonld.PageContact}).Type(); got != "ContactPage" {
 		t.Errorf("Type() = %q, want ContactPage", got)
 	}
 }
@@ -101,7 +101,7 @@ func TestProfilePage_Marshal(t *testing.T) {
 }
 
 func TestPlugin_PageTypesTakeKeys(t *testing.T) {
-	// Keyed loops keep every node, and a WebPage's key is its PageType: an
+	// Keyed loops keep every node, and a WebPage's key is its Kind: an
 	// AboutPage and a WebPage are two nodes.
 	site := newSite(t, jsonld.New(jsonld.Options{}), func(rc *collage.RenderContext) {
 		for _, k := range []string{"a", "b"} {
@@ -111,7 +111,7 @@ func TestPlugin_PageTypesTakeKeys(t *testing.T) {
 				jsonld.ProfilePage{Key: k, MainEntity: jsonld.Person{Name: k}},
 			)
 		}
-		jsonld.Emit(rc, jsonld.WebPage{Name: "plain"}, jsonld.WebPage{PageType: jsonld.PageAbout, Name: "about"})
+		jsonld.Emit(rc, jsonld.WebPage{Name: "plain"}, jsonld.WebPage{Kind: jsonld.PageAbout, Name: "about"})
 	})
 
 	count := map[string]int{}

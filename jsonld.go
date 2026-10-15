@@ -31,8 +31,10 @@ package jsonld
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log/slog"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -64,6 +66,13 @@ func Emit(rc *collage.RenderContext, nodes ...Node) {
 		return
 	}
 	for _, node := range nodes {
+		if isNil(node) {
+			// A nil node has no type to key it by and nothing to say; marshalling
+			// it would write "null" and asking its type would panic.
+			loggerFor(rc).WarnContext(rc.Context(), "jsonld: a nil node was left out of the page",
+				"type", fmt.Sprintf("%T", node))
+			continue
+		}
 		encoded, err := marshalNode(node)
 		if err != nil {
 			// One bad node must not cost the page its other nodes, or the page
@@ -76,6 +85,21 @@ func Emit(rc *collage.RenderContext, nodes ...Node) {
 		}
 		rc.Hoist(hoistArea, hoistKey(node), encoded)
 	}
+}
+
+// isNil reports whether node is nil, or a nil pointer, map or slice behind the
+// interface — a typed nil, which compares unequal to nil and panics as soon as a
+// value method is called on it.
+func isNil(node Node) bool {
+	if node == nil {
+		return true
+	}
+	v := reflect.ValueOf(node)
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice:
+		return v.IsNil()
+	}
+	return false
 }
 
 // keyed is the nodes of this package, which carry a Key. It is unexported, and
@@ -190,7 +214,7 @@ type Plugin struct {
 func New(opts Options) *Plugin { return &Plugin{opts: opts} }
 
 func (p *Plugin) Name() string    { return Name }
-func (p *Plugin) Version() string { return "0.5.0" }
+func (p *Plugin) Version() string { return "0.6.0" }
 
 func (p *Plugin) Init(_ context.Context, host collage.Host) error {
 	p.log = host.Logger()

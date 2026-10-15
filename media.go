@@ -26,7 +26,7 @@ type VideoObject struct {
 	Expires time.Time
 	// WatchCount is how many times it was watched, left out at zero.
 	WatchCount int
-	// RegionsAllowed are ISO 3166-1 alpha-2 codes, comma-joined on the page.
+	// RegionsAllowed are ISO 3166-1 alpha-2 codes.
 	RegionsAllowed []string
 	// Clips are the video's chapters, each a start and end in seconds.
 	Clips []Clip
@@ -74,7 +74,7 @@ func (v VideoObject) wire() videoJSON {
 		ContentURL:     v.ContentURL,
 		EmbedURL:       v.EmbedURL,
 		Expires:        dateTime(v.Expires),
-		RegionsAllowed: strings.Join(v.RegionsAllowed, ","),
+		RegionsAllowed: v.RegionsAllowed,
 	}
 	if v.WatchCount > 0 {
 		out.InteractionStatistic = &interactionCounterJSON{
@@ -115,7 +115,7 @@ type videoJSON struct {
 	ContentURL           string                  `json:"contentUrl,omitempty"`
 	EmbedURL             string                  `json:"embedUrl,omitempty"`
 	Expires              string                  `json:"expires,omitempty"`
-	RegionsAllowed       string                  `json:"regionsAllowed,omitempty"`
+	RegionsAllowed       []string                `json:"regionsAllowed,omitempty"`
 	InteractionStatistic *interactionCounterJSON `json:"interactionStatistic,omitempty"`
 	HasPart              []clipJSON              `json:"hasPart,omitempty"`
 	Publication          *broadcastJSON          `json:"publication,omitempty"`
@@ -290,9 +290,11 @@ func mediaSteps(steps []HowToStep) []howToStepJSON {
 // Recipe is a dish and how to make it: schema.org/Recipe.
 type Recipe struct {
 	// ID and Key are as on Article.
-	ID            string
-	Key           string
-	Name          string
+	ID   string
+	Key  string
+	Name string
+	// URL is the recipe's own page, which a carousel of recipes links to.
+	URL           string
 	ImageURLs     []string
 	Description   string
 	Author        Agent
@@ -310,6 +312,7 @@ type Recipe struct {
 	Ingredients     []string
 	Instructions    []HowToStep
 	AggregateRating *AggregateRating
+	Reviews         []Review
 	Video           *VideoObject
 }
 
@@ -323,6 +326,7 @@ func (r Recipe) MarshalJSON() ([]byte, error) {
 		ID:                 r.ID,
 		SchemaType:         "Recipe",
 		Name:               r.Name,
+		URL:                r.URL,
 		Image:              r.ImageURLs,
 		Description:        r.Description,
 		Author:             agentPtr(r.Author),
@@ -337,6 +341,7 @@ func (r Recipe) MarshalJSON() ([]byte, error) {
 		RecipeIngredient:   r.Ingredients,
 		RecipeInstructions: mediaSteps(r.Instructions),
 		AggregateRating:    aggregate(r.AggregateRating),
+		Review:             reviews(r.Reviews),
 	}
 	if r.Calories != "" {
 		out.Nutrition = &nutritionJSON{SchemaType: "NutritionInformation", Calories: r.Calories}
@@ -353,6 +358,7 @@ type recipeJSON struct {
 	ID                 string               `json:"@id,omitempty"`
 	SchemaType         string               `json:"@type"`
 	Name               string               `json:"name"`
+	URL                string               `json:"url,omitempty"`
 	Image              []string             `json:"image,omitempty"`
 	Description        string               `json:"description,omitempty"`
 	Author             *agentJSON           `json:"author,omitempty"`
@@ -368,6 +374,7 @@ type recipeJSON struct {
 	RecipeIngredient   []string             `json:"recipeIngredient,omitempty"`
 	RecipeInstructions []howToStepJSON      `json:"recipeInstructions,omitempty"`
 	AggregateRating    *aggregateRatingJSON `json:"aggregateRating,omitempty"`
+	Review             []reviewJSON         `json:"review,omitempty"`
 	Video              *videoJSON           `json:"video,omitempty"`
 }
 

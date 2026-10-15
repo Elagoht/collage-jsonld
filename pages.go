@@ -6,16 +6,16 @@ import (
 )
 
 // WebPage is one page of the site: schema.org/WebPage, or one of its more
-// specific kinds through PageType.
+// specific kinds through Kind.
 //
-// Its Type, and so its key, is the PageType: an AboutPage and a WebPage emitted on
+// Its Type, and so its key, is its Kind: an AboutPage and a WebPage emitted on
 // one page are two nodes, as an Article and a BlogPosting are.
 type WebPage struct {
 	// ID and Key are as on Article.
 	ID  string
 	Key string
-	// PageType is the kind of page; empty is PageWebPage.
-	PageType    WebPageType
+	// Kind is the schema.org type of the page; empty is PageWebPage.
+	Kind        PageKind
 	Name        string
 	Description string
 	URL         string
@@ -32,24 +32,24 @@ type WebPage struct {
 	PaywallCSS []string
 }
 
-// WebPageType is the schema.org type of a WebPage.
-type WebPageType string
+// PageKind is the schema.org type of a WebPage.
+type PageKind string
 
 const (
-	PageWebPage       WebPageType = "WebPage"
-	PageAbout         WebPageType = "AboutPage"
-	PageContact       WebPageType = "ContactPage"
-	PageCollection    WebPageType = "CollectionPage"
-	PageItem          WebPageType = "ItemPage"
-	PageSearchResults WebPageType = "SearchResultsPage"
-	PageCheckout      WebPageType = "CheckoutPage"
+	PageWebPage       PageKind = "WebPage"
+	PageAbout         PageKind = "AboutPage"
+	PageContact       PageKind = "ContactPage"
+	PageCollection    PageKind = "CollectionPage"
+	PageItem          PageKind = "ItemPage"
+	PageSearchResults PageKind = "SearchResultsPage"
+	PageCheckout      PageKind = "CheckoutPage"
 )
 
 func (w WebPage) Type() string {
-	if w.PageType == "" {
+	if w.Kind == "" {
 		return string(PageWebPage)
 	}
-	return string(w.PageType)
+	return string(w.Kind)
 }
 
 func (w WebPage) nodeKey() string { return w.Key }
@@ -74,7 +74,7 @@ func (w WebPage) MarshalJSON() ([]byte, error) {
 	if w.IsPartOf != "" {
 		out.IsPartOf = &pagesRefJSON{ID: w.IsPartOf}
 	}
-	if w.Paywalled {
+	if w.Paywalled || len(w.PaywallCSS) > 0 {
 		free := false
 		out.IsAccessibleForFree = &free
 	}

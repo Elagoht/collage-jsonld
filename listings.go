@@ -13,9 +13,10 @@ import (
 //
 // Google wants a name and an address before it shows one; the rest refines it.
 type LocalBusiness struct {
-	// BusinessType is the schema.org type: "Restaurant", "Store", "Dentist".
-	// Empty is "LocalBusiness". The more specific type is the more useful one.
-	BusinessType string
+	// Kind is the schema.org type, any of LocalBusiness's subtypes:
+	// "Restaurant", "Store", "Dentist". Empty is "LocalBusiness". The more
+	// specific type is the more useful one.
+	Kind BusinessKind
 	// ID and Key are as on Article.
 	ID          string
 	Key         string
@@ -63,11 +64,16 @@ type OpeningHours struct {
 	ValidThrough time.Time
 }
 
+// BusinessKind is the schema.org type of a LocalBusiness. It is free-form,
+// because schema.org has over a hundred subtypes: "Restaurant", "Store",
+// "Dentist", "MovieTheater".
+type BusinessKind string
+
 func (b LocalBusiness) Type() string {
-	if b.BusinessType == "" {
+	if b.Kind == "" {
 		return "LocalBusiness"
 	}
-	return b.BusinessType
+	return string(b.Kind)
 }
 
 func (b LocalBusiness) nodeKey() string { return b.Key }
@@ -170,11 +176,9 @@ type JobPosting struct {
 	ValidThrough time.Time
 	// EmploymentType is one or more of the Employment constants.
 	EmploymentType []EmploymentType
-	// HiringOrganization is the employer; its Kind defaults to
-	// AgentOrganization here rather than to a person.
-	HiringOrganization       Agent
-	HiringOrganizationLogo   string
-	HiringOrganizationSameAs string
+	// HiringOrganization is the employer, with its logo and profiles; its Kind
+	// defaults to AgentOrganization here rather than to a person.
+	HiringOrganization Agent
 	// Locations are where the work is done. One is written as an object, more as
 	// a list.
 	Locations []PostalAddress
@@ -254,19 +258,7 @@ func (j JobPosting) MarshalJSON() ([]byte, error) {
 	for _, kind := range j.EmploymentType {
 		out.EmploymentType = append(out.EmploymentType, string(kind))
 	}
-	if j.HiringOrganization.Name != "" {
-		org := j.HiringOrganization
-		if org.Kind == "" {
-			org.Kind = AgentOrganization
-		}
-		out.HiringOrganization = &listingHiringOrganizationJSON{
-			SchemaType: string(org.Kind),
-			Name:       org.Name,
-			SameAs:     j.HiringOrganizationSameAs,
-			URL:        org.URL,
-			Logo:       j.HiringOrganizationLogo,
-		}
-	}
+	out.HiringOrganization = organizationAgent(j.HiringOrganization)
 
 	switch len(j.Locations) {
 	case 0:
@@ -298,13 +290,15 @@ func (j JobPosting) MarshalJSON() ([]byte, error) {
 		out.BaseSalary = &listingMonetaryAmountJSON{
 			SchemaType: "MonetaryAmount",
 			Currency:   j.Salary.Currency,
-			Value: listingQuantitativeValueJSON{
-				SchemaType: "QuantitativeValue",
-				Value:      j.Salary.Value,
-				MinValue:   j.Salary.Min,
-				MaxValue:   j.Salary.Max,
-				UnitText:   string(j.Salary.Unit),
-			},
+		}
+	}
+	if j.Salary != nil && (j.Salary.Value != 0 || j.Salary.Min != 0 || j.Salary.Max != 0) {
+		out.BaseSalary.Value = &listingQuantitativeValueJSON{
+			SchemaType: "QuantitativeValue",
+			Value:      j.Salary.Value,
+			MinValue:   j.Salary.Min,
+			MaxValue:   j.Salary.Max,
+			UnitText:   string(j.Salary.Unit),
 		}
 	}
 	if j.Identifier != nil {
@@ -328,31 +322,23 @@ func listingPlace(address PostalAddress) listingPlaceJSON {
 }
 
 type listingJobPostingJSON struct {
-	Context                       string                         `json:"@context"`
-	ID                            string                         `json:"@id,omitempty"`
-	SchemaType                    string                         `json:"@type"`
-	Title                         string                         `json:"title"`
-	Description                   string                         `json:"description,omitempty"`
-	Identifier                    *listingPropertyValueJSON      `json:"identifier,omitempty"`
-	DatePosted                    string                         `json:"datePosted,omitempty"`
-	ValidThrough                  string                         `json:"validThrough,omitempty"`
-	EmploymentType                []string                       `json:"employmentType,omitempty"`
-	HiringOrganization            *listingHiringOrganizationJSON `json:"hiringOrganization,omitempty"`
-	JobLocation                   json.RawMessage                `json:"jobLocation,omitempty"`
-	JobLocationType               string                         `json:"jobLocationType,omitempty"`
-	ApplicantLocationRequirements []listingCountryJSON           `json:"applicantLocationRequirements,omitempty"`
-	BaseSalary                    *listingMonetaryAmountJSON     `json:"baseSalary,omitempty"`
-	DirectApply                   bool                           `json:"directApply,omitempty"`
-	EducationRequirements         string                         `json:"educationRequirements,omitempty"`
-	ExperienceRequirements        *listingExperienceJSON         `json:"experienceRequirements,omitempty"`
-}
-
-type listingHiringOrganizationJSON struct {
-	SchemaType string `json:"@type"`
-	Name       string `json:"name"`
-	SameAs     string `json:"sameAs,omitempty"`
-	URL        string `json:"url,omitempty"`
-	Logo       string `json:"logo,omitempty"`
+	Context                       string                     `json:"@context"`
+	ID                            string                     `json:"@id,omitempty"`
+	SchemaType                    string                     `json:"@type"`
+	Title                         string                     `json:"title"`
+	Description                   string                     `json:"description,omitempty"`
+	Identifier                    *listingPropertyValueJSON  `json:"identifier,omitempty"`
+	DatePosted                    string                     `json:"datePosted,omitempty"`
+	ValidThrough                  string                     `json:"validThrough,omitempty"`
+	EmploymentType                []string                   `json:"employmentType,omitempty"`
+	HiringOrganization            *agentJSON                 `json:"hiringOrganization,omitempty"`
+	JobLocation                   json.RawMessage            `json:"jobLocation,omitempty"`
+	JobLocationType               string                     `json:"jobLocationType,omitempty"`
+	ApplicantLocationRequirements []listingCountryJSON       `json:"applicantLocationRequirements,omitempty"`
+	BaseSalary                    *listingMonetaryAmountJSON `json:"baseSalary,omitempty"`
+	DirectApply                   bool                       `json:"directApply,omitempty"`
+	EducationRequirements         string                     `json:"educationRequirements,omitempty"`
+	ExperienceRequirements        *listingExperienceJSON     `json:"experienceRequirements,omitempty"`
 }
 
 type listingPlaceJSON struct {
@@ -366,9 +352,9 @@ type listingCountryJSON struct {
 }
 
 type listingMonetaryAmountJSON struct {
-	SchemaType string                       `json:"@type"`
-	Currency   string                       `json:"currency,omitempty"`
-	Value      listingQuantitativeValueJSON `json:"value"`
+	SchemaType string                        `json:"@type"`
+	Currency   string                        `json:"currency,omitempty"`
+	Value      *listingQuantitativeValueJSON `json:"value,omitempty"`
 }
 
 type listingQuantitativeValueJSON struct {
@@ -542,15 +528,17 @@ type QAPage struct {
 // QAQuestion is the question a QAPage is about: schema.org/Question.
 //
 // Google wants its name and at least one answer, accepted or suggested.
-// AnswerCount is all the answers the page has, not only those listed here.
+// AnswerCount is all the answers the page has, not only those listed here; left
+// zero, it is the number listed. It is always written, because Google requires it.
 type QAQuestion struct {
 	// Name is the question in short, the way a title is.
-	Name        string
-	Text        string
-	AnswerCount int
-	UpvoteCount int
-	DateCreated time.Time
-	Author      Agent
+	Name          string
+	Text          string
+	AnswerCount   int
+	UpvoteCount   int
+	DatePublished time.Time
+	DateModified  time.Time
+	Author        Agent
 	// Accepted are the answers the asker or the site accepted; Suggested are
 	// the others.
 	Accepted  []QAAnswer
@@ -561,10 +549,11 @@ type QAQuestion struct {
 type QAAnswer struct {
 	Text string
 	// URL links to the answer itself, typically the page with a fragment.
-	URL         string
-	UpvoteCount int
-	DateCreated time.Time
-	Author      Agent
+	URL           string
+	UpvoteCount   int
+	DatePublished time.Time
+	DateModified  time.Time
+	Author        Agent
 }
 
 func (QAPage) Type() string { return "QAPage" }
@@ -573,6 +562,10 @@ func (q QAPage) nodeKey() string { return q.Key }
 
 func (q QAPage) MarshalJSON() ([]byte, error) {
 	question := q.Question
+	answerCount := question.AnswerCount
+	if answerCount == 0 {
+		answerCount = len(question.Accepted) + len(question.Suggested)
+	}
 	return json.Marshal(listingQaPageJSON{
 		Context:    schemaContext,
 		ID:         q.ID,
@@ -581,9 +574,10 @@ func (q QAPage) MarshalJSON() ([]byte, error) {
 			SchemaType:      "Question",
 			Name:            question.Name,
 			Text:            question.Text,
-			AnswerCount:     question.AnswerCount,
+			AnswerCount:     answerCount,
 			UpvoteCount:     question.UpvoteCount,
-			DateCreated:     dateTime(question.DateCreated),
+			DatePublished:   dateTime(question.DatePublished),
+			DateModified:    dateTime(question.DateModified),
 			Author:          agentPtr(question.Author),
 			AcceptedAnswer:  listingAnswers(question.Accepted),
 			SuggestedAnswer: listingAnswers(question.Suggested),
@@ -596,12 +590,13 @@ func listingAnswers(list []QAAnswer) []listingQaAnswerJSON {
 	var out []listingQaAnswerJSON
 	for _, a := range list {
 		out = append(out, listingQaAnswerJSON{
-			SchemaType:  "Answer",
-			Text:        a.Text,
-			URL:         a.URL,
-			UpvoteCount: a.UpvoteCount,
-			DateCreated: dateTime(a.DateCreated),
-			Author:      agentPtr(a.Author),
+			SchemaType:    "Answer",
+			Text:          a.Text,
+			URL:           a.URL,
+			UpvoteCount:   a.UpvoteCount,
+			DatePublished: dateTime(a.DatePublished),
+			DateModified:  dateTime(a.DateModified),
+			Author:        agentPtr(a.Author),
 		})
 	}
 	return out
@@ -618,21 +613,23 @@ type listingQaQuestionJSON struct {
 	SchemaType      string                `json:"@type"`
 	Name            string                `json:"name"`
 	Text            string                `json:"text,omitempty"`
-	AnswerCount     int                   `json:"answerCount,omitempty"`
+	AnswerCount     int                   `json:"answerCount"`
 	UpvoteCount     int                   `json:"upvoteCount,omitempty"`
-	DateCreated     string                `json:"dateCreated,omitempty"`
+	DatePublished   string                `json:"datePublished,omitempty"`
+	DateModified    string                `json:"dateModified,omitempty"`
 	Author          *agentJSON            `json:"author,omitempty"`
 	AcceptedAnswer  []listingQaAnswerJSON `json:"acceptedAnswer,omitempty"`
 	SuggestedAnswer []listingQaAnswerJSON `json:"suggestedAnswer,omitempty"`
 }
 
 type listingQaAnswerJSON struct {
-	SchemaType  string     `json:"@type"`
-	Text        string     `json:"text"`
-	URL         string     `json:"url,omitempty"`
-	UpvoteCount int        `json:"upvoteCount,omitempty"`
-	DateCreated string     `json:"dateCreated,omitempty"`
-	Author      *agentJSON `json:"author,omitempty"`
+	SchemaType    string     `json:"@type"`
+	Text          string     `json:"text"`
+	URL           string     `json:"url,omitempty"`
+	UpvoteCount   int        `json:"upvoteCount,omitempty"`
+	DatePublished string     `json:"datePublished,omitempty"`
+	DateModified  string     `json:"dateModified,omitempty"`
+	Author        *agentJSON `json:"author,omitempty"`
 }
 
 // VacationRental is a place to stay rented out as a whole:
@@ -651,9 +648,13 @@ type VacationRental struct {
 	ImageURLs   []string
 	Address     *PostalAddress
 	Geo         GeoCoordinates
+	// AdditionalType is what the property is: "House", "Apartment", "Villa",
+	// "Cottage".
+	AdditionalType string
 	// Brand is the rental brand or host company, when there is one.
 	Brand string
-	// CheckinTime and CheckoutTime are local wall-clock times: "15:00".
+	// CheckinTime and CheckoutTime are times of day with their offset, as Google
+	// writes them: "14:30:00+03:00".
 	CheckinTime  string
 	CheckoutTime string
 	// KnowsLanguage are the languages the host speaks, as IETF tags: "tr", "en".
@@ -663,21 +664,29 @@ type VacationRental struct {
 	Reviews         []Review
 }
 
-// Accommodation is what a VacationRental rents: schema.org/Accommodation or one of
-// its more specific types.
+// Accommodation is what a VacationRental rents: schema.org/Accommodation.
 type Accommodation struct {
-	// Kind is the schema.org type: "House", "Apartment", "Room". Empty is
-	// "Accommodation".
-	Kind string
+	// AdditionalType is how much of the property is rented: "EntirePlace",
+	// "PrivateRoom", "SharedRoom".
+	AdditionalType string
 	// Occupancy is the most guests it takes.
-	Occupancy   int
-	Bedrooms    int
-	Bathrooms   int
+	Occupancy int
+	Rooms     int
+	Bedrooms  int
+	// Bathrooms counts a half bathroom as 0.5.
+	Bathrooms   float64
 	FloorSizeM2 float64
 	Beds        []Bed
-	// Amenities are what it offers, each written as present: "wifi",
-	// "airConditioning", "kitchen".
-	Amenities []string
+	Amenities   []Amenity
+}
+
+// Amenity is something an Accommodation offers, by Google's amenity name:
+// "wifi", "ac", "kitchen", "pool". An empty Value says it is there; the
+// amenities that take a kind — "internetType", "parkingType", "poolType",
+// "licenseNum" — say it in Value: "Free", "Indoor".
+type Amenity struct {
+	Name  string
+	Value string
 }
 
 // Bed is a kind of bed and how many of them there are: schema.org/BedDetails.
@@ -704,6 +713,7 @@ func (v VacationRental) MarshalJSON() ([]byte, error) {
 		CheckinTime:     v.CheckinTime,
 		CheckoutTime:    v.CheckoutTime,
 		KnowsLanguage:   v.KnowsLanguage,
+		AdditionalType:  v.AdditionalType,
 		AggregateRating: aggregate(v.AggregateRating),
 		Review:          reviews(v.Reviews),
 	}
@@ -724,17 +734,15 @@ func (v VacationRental) MarshalJSON() ([]byte, error) {
 // empty reports whether nothing about the accommodation was given, so the
 // property is left out rather than written as a bare type.
 func (a Accommodation) empty() bool {
-	return a.Kind == "" && a.Occupancy == 0 && a.Bedrooms == 0 && a.Bathrooms == 0 &&
+	return a.AdditionalType == "" && a.Occupancy == 0 && a.Rooms == 0 && a.Bedrooms == 0 && a.Bathrooms == 0 &&
 		a.FloorSizeM2 == 0 && len(a.Beds) == 0 && len(a.Amenities) == 0
 }
 
 func (a Accommodation) wire() listingAccommodationJSON {
-	kind := a.Kind
-	if kind == "" {
-		kind = "Accommodation"
-	}
 	out := listingAccommodationJSON{
-		SchemaType:             kind,
+		SchemaType:             "Accommodation",
+		AdditionalType:         a.AdditionalType,
+		NumberOfRooms:          a.Rooms,
 		NumberOfBedrooms:       a.Bedrooms,
 		NumberOfBathroomsTotal: a.Bathrooms,
 	}
@@ -750,10 +758,16 @@ func (a Accommodation) wire() listingAccommodationJSON {
 		out.Bed = append(out.Bed, listingBedJSON{SchemaType: "BedDetails", NumberOfBeds: bed.Count, TypeOfBed: bed.Type})
 	}
 	for _, amenity := range a.Amenities {
+		value := json.RawMessage("true")
+		if amenity.Value != "" {
+			// A string marshals without fail; the error is json.Marshal's
+			// signature, not a case.
+			value, _ = json.Marshal(amenity.Value)
+		}
 		out.AmenityFeature = append(out.AmenityFeature, listingAmenityJSON{
 			SchemaType: "LocationFeatureSpecification",
-			Name:       amenity,
-			Value:      true,
+			Name:       amenity.Name,
+			Value:      value,
 		})
 	}
 	return out
@@ -763,6 +777,7 @@ type listingVacationRentalJSON struct {
 	Context         string                    `json:"@context"`
 	ID              string                    `json:"@id,omitempty"`
 	SchemaType      string                    `json:"@type"`
+	AdditionalType  string                    `json:"additionalType,omitempty"`
 	Identifier      string                    `json:"identifier,omitempty"`
 	Name            string                    `json:"name"`
 	Description     string                    `json:"description,omitempty"`
@@ -786,9 +801,11 @@ type listingBrandJSON struct {
 
 type listingAccommodationJSON struct {
 	SchemaType             string                        `json:"@type"`
+	AdditionalType         string                        `json:"additionalType,omitempty"`
 	Occupancy              *listingQuantitativeValueJSON `json:"occupancy,omitempty"`
+	NumberOfRooms          int                           `json:"numberOfRooms,omitempty"`
 	NumberOfBedrooms       int                           `json:"numberOfBedrooms,omitempty"`
-	NumberOfBathroomsTotal int                           `json:"numberOfBathroomsTotal,omitempty"`
+	NumberOfBathroomsTotal float64                       `json:"numberOfBathroomsTotal,omitempty"`
 	FloorSize              *listingFloorSizeJSON         `json:"floorSize,omitempty"`
 	Bed                    []listingBedJSON              `json:"bed,omitempty"`
 	AmenityFeature         []listingAmenityJSON          `json:"amenityFeature,omitempty"`
@@ -807,9 +824,9 @@ type listingBedJSON struct {
 }
 
 type listingAmenityJSON struct {
-	SchemaType string `json:"@type"`
-	Name       string `json:"name"`
-	Value      bool   `json:"value"`
+	SchemaType string          `json:"@type"`
+	Name       string          `json:"name"`
+	Value      json.RawMessage `json:"value"`
 }
 
 var (
