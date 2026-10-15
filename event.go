@@ -118,16 +118,6 @@ const (
 	AttendanceMixed   AttendanceMode = "https://schema.org/MixedEventAttendanceMode"
 )
 
-// Availability is schema.org's ItemAvailability for an Offer, written as its
-// full IRI.
-type Availability string
-
-const (
-	InStock  Availability = "https://schema.org/InStock"
-	SoldOut  Availability = "https://schema.org/SoldOut"
-	PreOrder Availability = "https://schema.org/PreOrder"
-)
-
 // Place is a physical location: schema.org/Place. It is part of an Event, not a
 // node of its own.
 type Place struct {
@@ -165,33 +155,6 @@ func (a *PostalAddress) wire() *postalAddressJSON {
 		PostalCode:      a.PostalCode,
 		AddressCountry:  a.Country,
 	}
-}
-
-// Offer is a way to attend an Event — a ticket, a registration:
-// schema.org/Offer.
-type Offer struct {
-	URL string
-	// Price is a string so that "0", a free event, is written rather than
-	// mistaken for no price. Use a dot for decimals: "149.90".
-	Price string
-	// Currency is an ISO 4217 code: "TRY".
-	Currency     string
-	Availability Availability
-	ValidFrom    time.Time
-}
-
-func (o Offer) wire() offerJSON {
-	out := offerJSON{
-		SchemaType:    "Offer",
-		URL:           o.URL,
-		Price:         o.Price,
-		PriceCurrency: o.Currency,
-		Availability:  string(o.Availability),
-	}
-	if !o.ValidFrom.IsZero() {
-		out.ValidFrom = o.ValidFrom.Format(time.RFC3339)
-	}
-	return out
 }
 
 // organizerNode is an event's organizer, flattened into name fields as Article's
@@ -238,13 +201,4 @@ type postalAddressJSON struct {
 	AddressRegion   string `json:"addressRegion,omitempty"`
 	PostalCode      string `json:"postalCode,omitempty"`
 	AddressCountry  string `json:"addressCountry,omitempty"`
-}
-
-type offerJSON struct {
-	SchemaType    string `json:"@type"`
-	URL           string `json:"url,omitempty"`
-	Price         string `json:"price,omitempty"`
-	PriceCurrency string `json:"priceCurrency,omitempty"`
-	Availability  string `json:"availability,omitempty"`
-	ValidFrom     string `json:"validFrom,omitempty"`
 }
